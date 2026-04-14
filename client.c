@@ -7,18 +7,16 @@
 #include <unistd.h>
 #define BUFSZ 1024
 
-// 1. Corrigida a assinatura: agora recebe apenas o nome do programa
+
 void usage(int argc, char **argv){
         printf("Usage: %s <server IP> <server port>\n", argv[0]);
         printf("Example: %s 127.0.0.1 51511\n", argv[0]);
         exit(EXIT_FAILURE);
 }
 
-
-// 2. Alterado de void main para int main (padrão C)
 int main(int argc, char **argv){
-        if (argc < 3) {
-                usage(argc, argv); // 3. Enviando o argumento corretamente
+	if (argc < 3) { //<IP> <porta>
+                usage(argc, argv);
         }
 
         int s;
@@ -32,38 +30,88 @@ int main(int argc, char **argv){
 	struct sockaddr *addr = (struct sockaddr *)(&storage);
 
         if (0 != connect(s, addr, sizeof(storage))){
-                logexit("connect"); // 4. Corrigido de logiexit para logexit
+                logexit("connect");
         }
+	//Mensagem do servidor
+	HackerMessage msg;
+	ssize_t bytes = recv(s, &msg, sizeof(msg), 0);
+	printf("Erro no protocolo: esperado MSG_START.\n");
+	close(s);
+	exit(EXIT_FAILURE);}
+	printf("Cliente Conectado!\n");
 
-        char addrstr[BUFSZ];
-        addrtostr(addr, addrstr, BUFSZ);
-        printf("connected to %s\n", addrstr);
 
+	char input[BUFSZ];
+	int palpite[5];
+	int tentativas = 0;
 
-        char buf[BUFSZ];
-        memset(buf, 0, BUFSZ);
-        printf("<mensagem> ");
-        fgets(buf, BUFSZ-1, stdin);
+        while (1) {
+        	printf("Insira seu palpite:\n> ");
+        	fflush(stdout);
 
-        int count = send(s, buf, strlen(buf)+1, 0);
-        if (count != strlen(buf)+1){
-                logexit("send");
-        }
+        	if (fgets(input, BUFSZ, stdin) == NULL) {
+            	break;
+        	}
+        	input[strcspn(input, "\n")] = '\0';
+        	if (strlen(input) != 5) {
+            		printf("Insira uma sequência válida!\n");
+            		continue;
+		}
 
-        memset(buf, 0, BUFSZ);
-        unsigned total = 0;
-        while(1){
-                count = recv(s, buf + total, BUFSZ - total, 0);
-                if (count == 0){
-                        break;
+        	int valido = 1;
+        	for (int i = 0; i < 5; i++) {
+            		if (!isdigit(input[i])) {
+                		printf("Insira uma sequência válida!\n");
+                		valido = 0;
+                		break;
+            		}
+            	palpite[i] = input[i] - '0';
+        	}
+
+        	if (!valido) {
+            		continue;
+        	}
+        	memset(&msg, 0, sizeof(msg));
+        	msg.type = MSG_GUESS;
+        	memcpy(msg.guess, guess, sizeof(guess));
+        	if (send(s, &msg, sizeof(msg), 0) != sizeof(msg)) {
+            	logexit("send guess");
+        	}
+
+        	// Recebe resposta do servidor
+        	bytes = recv(s, &msg, sizeof(msg), 0);
+        	if (bytes <= 0) {
+            		printf("Conexão encerrada pelo servidor.\n");
+            		break;
+        	}
+
+        	// Processa a resposta
+        	if (msg.type == MSG_WIN) {
+            		printf("Acesso concedido! Thaísa recuperou o sistema!\n");
+            		break;
+        	} else if (msg.type == MSG_ERROR) {
+            		printf("Insira uma sequência válida!\n");
+        	} else if (msg.type == MSG_FEEDBACK) {
+            		tentativas = msg.attempts;
+
+            // Monta string da dica conforme especificação
+            char dica[6];
+            for (int i = 0; i < 5; i++) {
+                if (msg.feedback[i] == 2) {
+                    dica[i] = '0' + msg.guess[i];   // dígito correto
+                } else if (msg.feedback[i] == 1) {
+                    dica[i] = '*';                  // presente mas posição errada
+                } else {
+                    dica[i] = '-';                  // ausente
                 }
-                total += count;
+            }
+            dica[5] = '\0';
+
+            printf("Dica: %s\n", dica);
+            printf("Tentativas realizadas: %d\n", attempts);
         }
+    }
 
-        close(s); // 5. Adicionado o ponto e vírgula ausente
-
-        printf("received %d bytes\n", total);
-        puts(buf);
-
-        exit(EXIT_SUCCESS);
-} // 6. Removida a chave dupla que existia aqui embaixo
+    close(s);
+    return 0;
+}

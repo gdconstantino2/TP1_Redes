@@ -94,7 +94,6 @@ while (1) {
     }
 
     if (msg.type == MSG_GUESS) {
-        // Valida se todos os dígitos estão entre 0 e 9
         int valido = 1;
         for (int i = 0; i < 5; i++) {
             if (msg.guess[i] < 0 || msg.guess[i] > 9) {
@@ -103,11 +102,11 @@ while (1) {
             }
         }
 
-        if (!valido) {   // <-- CORREÇÃO: envia erro quando NÃO válido
+        if (valido == 0) {
             msg.type = MSG_ERROR;
             msg.win_status = -1;
             send(csock, &msg, sizeof(msg), 0);
-            continue;    // não incrementa tentativas
+            continue;
         }
 
         tentativas++;
