@@ -106,26 +106,6 @@ int server_sockaddr_init(const char *proto, const char *portstr,
         return -1;
     }
 }
-#define MSG_SIZE 128
-
-typedef enum {
-    MSG_START,    // Servidor solicita a senha de acesso
-    MSG_GUESS,    // Cliente envia o palpite de 5 dígitos
-    MSG_FEEDBACK, // Servidor retorna as dicas (0, 1 ou 2)
-    MSG_WIN,      // Servidor informa que o código foi quebrado
-    MSG_ERROR,    // Servidor reporta erro de formato/tamanho
-    MSG_EXIT      // Encerramento da conexão
-} MessageType;
-
-typedef struct {
-    int type;               // Tipo da mensagem (MessageType)
-    int guess[5];           // Vetor com os 5 dígitos enviados pelo cliente
-    int feedback[5];        // Dicas retornadas pelo servidor (2, 1 ou 0)
-    int attempts;           // Contador de tentativas realizadas
-    int win_status;         // 1 para vitória, 0 para em jogo, -1 para erro
-    char message[MSG_SIZE]; // Mensagem de texto para logs do terminal
-} HackerMessage;
-
 void process_guide(int *senha, int *palpite, int *feedback, int *vitoria){
 	int contador_vitoria = 0;
 	for(int h = 0; h <=4; h++){

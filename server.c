@@ -53,7 +53,14 @@ int main(int argc, char **argv) {
 
     char addrstr[BUFSZ];
     addrtostr(addr, addrstr, BUFSZ);
-    printf("bound to %s, waiting connections\n", addrstr);
+    const char *ip_versão;
+    if(strcmp(argv[1], "v4") == 0){
+	ip_versão = "4";
+    }else{
+
+	ip_versão = "6";
+    }
+    printf("Servidor iniciado em modo IPV%s na porta %s\n", ip_versão, argv[2]);
 
     while (1) {
         struct sockaddr_storage cstorage;
@@ -66,7 +73,7 @@ int main(int argc, char **argv) {
 
         char caddrstr[BUFSZ];
         addrtostr(caddr, caddrstr, BUFSZ);
-        printf("[log] connection from %s\n", caddrstr);
+        printf("Cliente conectado\n");
 
 	HackerMessage msg;
 	memset(&msg, 0, sizeof(HackerMessage));
@@ -75,37 +82,51 @@ int main(int argc, char **argv) {
 	strcpy(msg.message, "Ola, Thaisa!");
 	ssize_t bytes_sent = send(csock, &msg, sizeof(HackerMessage), 0);
 	if(bytes_sent!= sizeof(HackerMessage)){logexit("send start");}
-        int tentativas = 0; // Inicialize fora do loop interno
-	while (1) {
-    		int bytes_received = recv(csock, &msg, sizeof(HackerMessage), 0);
 
-    		if (bytes_received <= 0) {
-        		printf("Cliente desconectado\n");
-        		break;
-    		}
 
-    		if (msg.type == MSG_GUESS) {
-        		tentativas++;
-        		msg.attempts = tentativas;
-			
-        		process_guide(senha_secreta, msg.guess, msg.feedback, &msg.win_status);
+	int tentativas = 0;
+ssize_t bytes_received;
 
-        		if (msg.win_status == 1) {
-            		msg.type = MSG_WIN;
-            		send(csock, &msg, sizeof(HackerMessage), 0);
-            		break;
-        	} else {
-            		msg.type = MSG_FEEDBACK;
-        	}
+while (1) {
+    bytes_received = recv(csock, &msg, sizeof(msg), 0);
+    if (bytes_received <= 0) {
+        break;
     }
 
-    // Envia a resposta (seja feedback ou erro)
-    send(csock, &msg, sizeof(HackerMessage), 0);
+    if (msg.type == MSG_GUESS) {
+        // Valida se todos os dígitos estão entre 0 e 9
+        int valido = 1;
+        for (int i = 0; i < 5; i++) {
+            if (msg.guess[i] < 0 || msg.guess[i] > 9) {
+                valido = 0;
+                break;
+            }
+        }
+
+        if (!valido) {   // <-- CORREÇÃO: envia erro quando NÃO válido
+            msg.type = MSG_ERROR;
+            msg.win_status = -1;
+            send(csock, &msg, sizeof(msg), 0);
+            continue;    // não incrementa tentativas
+        }
+
+        tentativas++;
+        msg.attempts = tentativas;
+
+        process_guide(senha_secreta, msg.guess, msg.feedback, &msg.win_status);
+
+        if (msg.win_status == 1) {
+            msg.type = MSG_WIN;
+            send(csock, &msg, sizeof(msg), 0);
+            break;
+        } else {
+            msg.type = MSG_FEEDBACK;
+            send(csock, &msg, sizeof(msg), 0);
+        }
+    }
 }
 
-
-        close(csock);
-    }
-
-    exit(EXIT_SUCCESS);
+close(csock);
+printf("Cliente desconectado\n");
+}
 }
