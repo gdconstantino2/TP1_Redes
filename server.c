@@ -5,17 +5,30 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <ctype.h>
 #define BUFSZ 1024
 
 void usage(int argc, char **argv) {
-    printf("usage: %s <v4|v6> <server port>\n", argv[0]);
+    printf("usage: %s <protocolo> <porta> <senha>\n", argv[0]);
     printf("example: %s v4 51511\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
+    int senha_secreta[5];
+    if (argc < 4) {
         usage(argc, argv);
+    }
+    if(strlen(argv[3]) != 5){
+	printf("A senha deve conter 5 numeros");
+	exit(EXIT_FAILURE);
+    }
+    for(int i = 0; i <= 4; i++){
+	if(!isdigit(argv[3][i])){
+		printf("Senha nao eh composta apenas por numeros");
+		exit(EXIT_FAILURE);
+	}
+	senha_secreta[i] = argv[3][i] - '0';
     }
 
     struct sockaddr_storage storage;
@@ -55,16 +68,41 @@ int main(int argc, char **argv) {
         addrtostr(caddr, caddrstr, BUFSZ);
         printf("[log] connection from %s\n", caddrstr);
 
-        char buf[BUFSZ];
-        memset(buf, 0, BUFSZ);
-        size_t count = recv(csock, buf, BUFSZ - 1, 0);
-        printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
+	HackerMessage msg;
+	memset(&msg, 0, sizeof(HackerMessage));
+	msg.type = MSG_START;
+	msg.win_status = 0;
+	strcpy(msg.message, "Ola, Thaisa!");
+	ssize_t bytes_sent = send(csock, &msg, sizeof(HackerMessage), 0);
+	if(bytes_sent!= sizeof(HackerMessage)){logexit("send start");}
+        int tentativas = 0; // Inicialize fora do loop interno
+	while (1) {
+    		int bytes_received = recv(csock, &msg, sizeof(HackerMessage), 0);
 
-        sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
-        count = send(csock, buf, strlen(buf) + 1, 0);
-        if (count != strlen(buf) + 1) {
-            logexit("send");
-        }
+    		if (bytes_received <= 0) {
+        		printf("Cliente desconectado\n");
+        		break;
+    		}
+
+    		if (msg.type == MSG_GUESS) {
+        		tentativas++;
+        		msg.attempts = tentativas;
+			
+        		process_guide(senha_secreta, msg.guess, msg.feedback, &msg.win_status);
+
+        		if (msg.win_status == 1) {
+            		msg.type = MSG_WIN;
+            		send(csock, &msg, sizeof(HackerMessage), 0);
+            		break;
+        	} else {
+            		msg.type = MSG_FEEDBACK;
+        	}
+    }
+
+    // Envia a resposta (seja feedback ou erro)
+    send(csock, &msg, sizeof(HackerMessage), 0);
+}
+
 
         close(csock);
     }
