@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
             tentativas = msg.attempts;
 
             char dica[6];
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i <= 4; i++) {
                 if (msg.feedback[i] == 2) {
                     dica[i] = '0' + msg.guess[i];
                 } else if (msg.feedback[i] == 1) {
