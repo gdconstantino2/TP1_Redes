@@ -48,11 +48,10 @@ int main(int argc, char **argv) {
 
     char input[BUFSZ];
     int guess[5];
-    int attempts = 0;
+    int tentativas = 0;
 
     while (1) {
-        printf("Insira seu palpite:\n> ");
-        fflush(stdout);
+        printf("Insira seu palpite:\n> \n");
 
         if (fgets(input, BUFSZ, stdin) == NULL) {
             break;
@@ -65,7 +64,7 @@ int main(int argc, char **argv) {
         }
 
         int valido = 1;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i <= 4; i++) {
             if (!isdigit(input[i])) {
                 printf("Insira uma sequência válida!\n");
                 valido = 0;
@@ -97,7 +96,7 @@ int main(int argc, char **argv) {
         } else if (msg.type == MSG_ERROR) {
             printf("Insira uma sequência válida!\n");
         } else if (msg.type == MSG_FEEDBACK) {
-            attempts = msg.attempts;
+            tentativas = msg.attempts;
 
             char dica[6];
             for (int i = 0; i < 5; i++) {
@@ -112,7 +111,7 @@ int main(int argc, char **argv) {
             dica[5] = '\0';
 
             printf("Dica: %s\n", dica);
-            printf("Tentativas realizadas: %d\n", attempts);
+            printf("Tentativas realizadas: %d\n", tentativas);
         }
     }
 
