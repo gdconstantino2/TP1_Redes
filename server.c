@@ -95,7 +95,7 @@ while (1) {
 
     if (msg.type == MSG_GUESS) {
         int valido = 1;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             if (msg.guess[i] < 0 || msg.guess[i] > 9) {
                 valido = 0;
                 break;
