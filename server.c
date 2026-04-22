@@ -10,7 +10,6 @@
 
 void usage(int argc, char **argv) {
     printf("usage: %s <protocolo> <porta> <senha>\n", argv[0]);
-    printf("example: %s v4 51511\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -20,12 +19,10 @@ int main(int argc, char **argv) {
         usage(argc, argv);
     }
     if(strlen(argv[3]) != 5){
-	printf("A senha deve conter 5 numeros");
 	exit(EXIT_FAILURE);
     }
     for(int i = 0; i <= 4; i++){
 	if(!isdigit(argv[3][i])){
-		printf("Senha nao eh composta apenas por numeros");
 		exit(EXIT_FAILURE);
 	}
 	senha_secreta[i] = argv[3][i] - '0';
@@ -82,7 +79,6 @@ int main(int argc, char **argv) {
 	memset(&msg, 0, sizeof(HackerMessage));
 	msg.type = MSG_START;
 	msg.win_status = 0;
-	strcpy(msg.message, "Ola, Thaisa!");
 	ssize_t bytes_sent = send(csock, &msg, sizeof(HackerMessage), 0);
 	if(bytes_sent!= sizeof(HackerMessage)){logexit("send start");}
 
