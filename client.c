@@ -10,7 +10,6 @@
 #define BUFSZ 1024
 
 void usage(int argc, char **argv) {
-    printf("Usage: %s <server IP> <server port>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -19,16 +18,16 @@ int main(int argc, char **argv) {
         usage(argc, argv);
     }
 
-    
-
     struct sockaddr_storage storage;
     if (addrparse(argv[1], argv[2], &storage) != 0) {
         usage(argc, argv);
     }
+    
     int s = socket(storage.ss_family, SOCK_STREAM, 0);
     if (s == -1) {
         logexit("socket");
     }
+    
     struct sockaddr *addr = (struct sockaddr *)(&storage);
 
     if (connect(s, addr, sizeof(storage)) != 0) {
@@ -44,14 +43,14 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-
     char input[BUFSZ];
     int guess[5];
     int tentativas = 0;
 
     while (1) {
-        printf("Insira seu palpite:\n>");
-
+        printf("Insira seu palpite:\n> ");
+        fflush(stdout);
+        
         if (fgets(input, BUFSZ, stdin) == NULL) {
             break;
         }
@@ -75,10 +74,11 @@ int main(int argc, char **argv) {
         if (!valido) {
             continue;
         }
-
+        
         memset(&msg, 0, sizeof(msg));
         msg.type = MSG_GUESS;
         memcpy(msg.guess, guess, sizeof(guess));
+        
         if (send(s, &msg, sizeof(msg), 0) != sizeof(msg)) {
             logexit("send guess");
         }
