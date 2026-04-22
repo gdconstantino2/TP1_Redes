@@ -56,11 +56,14 @@ int main(int argc, char **argv) {
     const char *ip_versão;
     if(strcmp(argv[1], "v4") == 0){
 	ip_versão = "4";
-    }else{
+    }else if(strcmp(argv[1], "v6") == 0){
 
 	ip_versão = "6";
     }
-    printf("Servidor iniciado em modo IPV%s na porta %s\n", ip_versão, argv[2]);
+	else{
+		exit(EXIT_FAILURE);
+	}
+    printf("Servidor iniciado em modo IPv%s na porta %s\n", ip_versão, argv[2]);
 
     while (1) {
         struct sockaddr_storage cstorage;
@@ -95,7 +98,7 @@ while (1) {
 
     if (msg.type == MSG_GUESS) {
         int valido = 1;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i <= 4; i++) {
             if (msg.guess[i] < 0 || msg.guess[i] > 9) {
                 valido = 0;
                 break;
