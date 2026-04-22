@@ -19,14 +19,15 @@ int main(int argc, char **argv) {
         usage(argc, argv);
     }
 
-    int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s == -1) {
-        logexit("socket");
-    }
+    
 
     struct sockaddr_storage storage;
     if (addrparse(argv[1], argv[2], &storage) != 0) {
         usage(argc, argv);
+    }
+    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    if (s == -1) {
+        logexit("socket");
     }
     struct sockaddr *addr = (struct sockaddr *)(&storage);
 
