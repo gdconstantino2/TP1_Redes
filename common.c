@@ -11,14 +11,12 @@ void logexit(const char *msg){
 int addrparse(const char *addrstr, const char *portstr,
               struct sockaddr_storage *storage) {
 
-    // CORREÇÃO LÓGICA: '=' (atribuição) trocado por '==' (comparação)
     if (addrstr == NULL || portstr == NULL) {
         return -1;
     }
 
     uint16_t port = (uint16_t)atoi(portstr); // unsigned short
 
-    // CORREÇÃO LÓGICA: '=' trocado por '=='
     if (port == 0) {
         return -1;
     }
