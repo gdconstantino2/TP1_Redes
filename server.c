@@ -9,7 +9,6 @@
 #define BUFSZ 1024
 
 void usage(int argc, char **argv) {
-    printf("usage: %s <protocolo> <porta> <senha>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
