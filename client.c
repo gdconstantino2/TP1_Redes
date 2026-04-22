@@ -11,7 +11,6 @@
 
 void usage(int argc, char **argv) {
     printf("Usage: %s <server IP> <server port>\n", argv[0]);
-    printf("Example: %s 127.0.0.1 51511\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -44,7 +43,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Cliente Conectado\n");
 
     char input[BUFSZ];
     int guess[5];
@@ -105,7 +103,7 @@ int main(int argc, char **argv) {
                 } else if (msg.feedback[i] == 1) {
                     dica[i] = '*';
                 } else {
-                    dica[i] = '-';
+                    dica[i] = '_';
                 }
             }
             dica[5] = '\0';
