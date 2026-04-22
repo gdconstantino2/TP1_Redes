@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     int tentativas = 0;
 
     while (1) {
-        printf("Insira seu palpite:\n> \n");
+        printf("Insira seu palpite:\n>");
 
         if (fgets(input, BUFSZ, stdin) == NULL) {
             break;
