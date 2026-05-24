@@ -10,134 +10,122 @@
 
 void usage(int argc, char **argv)
 {
-    fprintf(stderr, "Uso: %s <endereco> <porta>\n", argv[0]);
+    fprintf(stderr, "Uso: %s <host> <porta> <username>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc != 4)
     {
         usage(argc, argv);
     }
-    
+
     struct sockaddr_storage storage;
     if (addrparse(argv[1], argv[2], &storage) != 0)
     {
         usage(argc, argv);
     }
-    
+
     int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    ssize_t bytes;
     if (s == -1)
     {
         logexit("socket");
     }
-    
+
     struct sockaddr *addr = (struct sockaddr *)(&storage);
     if (connect(s, addr, sizeof(storage)) != 0)
     {
         logexit("connect");
     }
-    
-    printf("Conectado ao servidor genérico!\n");
-    
-    // Recebe handshake inicial
-    GenericMessage msg;
-    ssize_t bytes = recv(s, &msg, sizeof(msg), 0);
-    if (bytes != sizeof(msg) || msg.type != MSG_HELLO)
+
+    printf("Conectado ao servidor Arianagram!\n");
+
+    Message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = MSG_CONNECT;
+    strncpy(msg.username, argv[3], USER_SIZE); // username da linha de comando
+
+    if (send(s, &msg, sizeof(msg), 0) != sizeof(msg))
     {
-        fprintf(stderr, "Erro no protocolo: handshake falhou\n");
-        close(s);
-        exit(EXIT_FAILURE);
+        logexit("send connect");
     }
-    
-    printf("Servidor: %s\n", msg.message);
+
+    printf("Identificado como %s\n", argv[3]);
+
     printf("\nComandos disponíveis:\n");
-    printf("  req <texto> - Envia requisição\n");
-    printf("  data <dados> - Envia dados\n");
+    printf("  POST <texto> - Publica uma mensagem\n");
+    printf("  FOLLOW @user - Segue um usuário\n");
+    printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
-    
+
     char input[BUFSZ];
     char command[BUFSZ];
     char argument[BUFSZ];
-    
+
     while (1)
     {
         printf("> ");
         fflush(stdout);
-        
+
         if (fgets(input, BUFSZ, stdin) == NULL)
-        {
             break;
-        }
+
         input[strcspn(input, "\n")] = '\0';
-        
         if (strlen(input) == 0)
-        {
             continue;
-        }
-        
-        // Parse comando
+
         if (sscanf(input, "%s %[^\n]", command, argument) < 1)
-        {
             continue;
-        }
-        
+
         memset(&msg, 0, sizeof(msg));
-        
+
         if (strcmp(command, "exit") == 0)
         {
-            msg.type = MSG_EXIT;
+            msg.type = MSG_END;
             send(s, &msg, sizeof(msg), 0);
-            
-            // Aguarda confirmação
-            bytes = recv(s, &msg, sizeof(msg), 0);
-            printf("Encerrando conexão...\n");
             break;
         }
-        else if (strcmp(command, "req") == 0)
+        else if (strcmp(command, "POST") == 0)
         {
-            msg.type = MSG_REQUEST;
-            snprintf(msg.data, MAX_DATA_SIZE, "%s", argument);
+            msg.type = MSG_POST;
+            strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
-            
-            bytes = recv(s, &msg, sizeof(msg), 0);
-            if (bytes <= 0)
-            {
-                printf("Conexão perdida\n");
-                break;
-            }
-            
-            if (msg.type == MSG_RESPONSE)
-            {
-                printf("Resposta: %s\n", msg.data);
-                printf("Mensagem: %s\n", msg.message);
-            }
         }
-        else if (strcmp(command, "data") == 0)
+        else if (strcmp(command, "FOLLOW") == 0)
         {
-            msg.type = MSG_DATA;
-            snprintf(msg.data, MAX_DATA_SIZE, "%s", argument);
+            msg.type = MSG_FOLLOW;
+            strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
-            
-            bytes = recv(s, &msg, sizeof(msg), 0);
-            if (bytes <= 0)
+        }
+        else if (strcmp(command, "READ") == 0)
+        {
+            msg.type = MSG_READ;
+            send(s, &msg, sizeof(msg), 0);
+
+            // Recebe as mensagens PUSH
+            while (1)
             {
-                printf("Conexão perdida\n");
-                break;
-            }
-            
-            if (msg.type == MSG_ACK)
-            {
-                printf("ACK: %s\n", msg.message);
+                Message push_msg;
+                bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
+                if (bytes <= 0)
+                    break;
+
+                if (push_msg.type == MSG_PUSH)
+                {
+                    printf("[FEED] ID %u | @%s: \"%s\"\n",
+                           push_msg.msg_id, push_msg.username, push_msg.content);
+                }
             }
         }
         else if (strcmp(command, "help") == 0)
         {
             printf("\nComandos:\n");
-            printf("  req <texto> - Envia requisição, servidor ecoa\n");
-            printf("  data <dados> - Envia dados, servidor confirma\n");
+            printf("  POST <texto> - Publica uma mensagem\n");
+            printf("  FOLLOW @user - Segue um usuário\n");
+            printf("  READ - Lê o feed histórico\n");
             printf("  exit - Encerra conexão\n\n");
         }
         else
@@ -145,8 +133,7 @@ int main(int argc, char **argv)
             printf("Comando desconhecido. Use 'help'\n");
         }
     }
-    
+
     close(s);
     printf("Cliente encerrado.\n");
     return 0;
-}

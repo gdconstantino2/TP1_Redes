@@ -68,18 +68,6 @@ void *client_thread(void *data)
     Message msg;
     memset(&msg, 0, sizeof(Message));
     
-    // Handshake inicial
-    msg.type = MSG_CONNECT;
-    //msg.status = 0;
-    snprintf(msg.content, CONTENT_SIZE, "Bem-vindo ao servidor genérico");
-    
-    if (send(cdata->csock, &msg, sizeof(Message), 0) != sizeof(Message))
-    {
-        printf("[Cliente %d] Falha no handshake\n", cdata->client_id);
-        close(cdata->csock);
-        free(cdata);
-        pthread_exit(EXIT_FAILURE);
-    }
     
     printf("[Cliente %d] Handshake realizado\n", cdata->client_id);
     
@@ -98,6 +86,18 @@ void *client_thread(void *data)
         
         // Processa mensagem baseado no tipo
         switch (msg.type) {
+                case MSG_CONNECT:
+                    pthread_mutex_lock(&clients_mutex);
+                    ClientNode *client = malloc(sizeof(ClientNode));
+                    if (client != NULL) {
+                        client->socket = cdata->csock;
+                        strncpy(client->username, msg.username, USER_SIZE);
+                        client->next = clients; 
+                        clients = client;          
+                    }
+                    pthread_mutex_unlock(&clients_mutex);
+                    printf("[CONN] @%s conectou.\n", msg.username);
+                    break;
                 case MSG_POST:
                     pthread_mutex_lock(&id_mutex);
                     uint32_t id = next_id++;
@@ -113,7 +113,27 @@ void *client_thread(void *data)
                         feed_count++;}
 
                     printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
-
+                    pthread_mutex_lock(&follows_mutex);
+                    FollowNode *f = follows;
+                    while (f != NULL) {
+                        if (strcmp(f->followed, msg.username) == 0) {
+        
+                            pthread_mutex_lock(&clients_mutex);
+                            ClientNode *c = clients;
+                            while (c != NULL) {
+                                if (strcmp(c->username, f->follower) == 0) {
+                                     int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
+                                     push_msg.msg_id = feed[pos].id;
+                                     pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;
+                                }
+                                c = c->next;
+                            }   
+                            pthread_mutex_unlock(&clients_mutex);
+        
+                        }
+                        f = f->next;
+                        }
+                    pthread_mutex_unlock(&follows_mutex);
                     pthread_mutex_unlock(&feed_mutex);
                     break;
         
