@@ -22,7 +22,7 @@ typedef enum {
 typedef struct {
     uint16_t type;                
     char username[USER_SIZE];       
-    char message[CONTENT_SIZE];    
+    char content[CONTENT_SIZE];    
     uint32_t msg_id;     
 }Message;
 
@@ -31,5 +31,6 @@ void logexit(const char *msg);
 int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage *storage);
 void addrtostr(const struct sockaddr *addr, char *str, size_t strsize);
 int server_sockaddr_init(const char *proto, const char *portstr, struct sockaddr_storage *storage);
+
 
 #endif

@@ -1,13 +1,47 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.h"
+#include "common-mt.h"
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
 
 #define BUFSZ 1024
+#define FEED_SIZE 5
+
+typedef struct ClientNode {
+    int socket;
+    char username[USER_SIZE];
+    struct ClientNode *next;
+} ClientNode;
+
+static ClientNode *clients = NULL;  // head da lista
+static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct {
+    uint32_t id;
+    char username[USER_SIZE];
+    char content[CONTENT_SIZE];
+} FeedEntry;
+
+typedef struct FollowNode {
+    char follower[USER_SIZE];
+    char followed[USER_SIZE];
+    struct FollowNode *next;
+} FollowNode;
+
+static FollowNode *follows = NULL;
+static pthread_mutex_t follows_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static FeedEntry feed[FEED_SIZE];
+static uint32_t next_id = 1;
+static int feed_count = 0;      
+static int feed_next = 0;       
+
+static pthread_mutex_t feed_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 void usage(int argc, char **argv)
 {
@@ -31,15 +65,15 @@ void *client_thread(void *data)
     addrtostr(caddr, caddrstr, BUFSZ);
     printf("[Cliente %d] Conectado de %s\n", cdata->client_id, caddrstr);
     
-    GenericMessage msg;
-    memset(&msg, 0, sizeof(GenericMessage));
+    Message msg;
+    memset(&msg, 0, sizeof(Message));
     
     // Handshake inicial
-    msg.type = MSG_HELLO;
-    msg.status = 0;
-    snprintf(msg.message, MSG_SIZE, "Bem-vindo ao servidor genérico");
+    msg.type = MSG_CONNECT;
+    //msg.status = 0;
+    snprintf(msg.content, CONTENT_SIZE, "Bem-vindo ao servidor genérico");
     
-    if (send(cdata->csock, &msg, sizeof(GenericMessage), 0) != sizeof(GenericMessage))
+    if (send(cdata->csock, &msg, sizeof(Message), 0) != sizeof(Message))
     {
         printf("[Cliente %d] Falha no handshake\n", cdata->client_id);
         close(cdata->csock);
@@ -49,8 +83,9 @@ void *client_thread(void *data)
     
     printf("[Cliente %d] Handshake realizado\n", cdata->client_id);
     
-    int sequence = 0;
+    //int sequence = 0;
     ssize_t bytes_received;
+
     
     while (1)
     {
@@ -62,58 +97,61 @@ void *client_thread(void *data)
         }
         
         // Processa mensagem baseado no tipo
-        switch (msg.type)
-        {
-            case MSG_REQUEST:
-                printf("[Cliente %d] Recebeu requisição: %s\n", 
-                       cdata->client_id, msg.data);
-                
-                // Prepara resposta
-                msg.type = MSG_RESPONSE;
-                msg.status = 0;
-                msg.sequence = sequence++;
-                snprintf(msg.data, MAX_DATA_SIZE, "Eco: %s", msg.data);
-                snprintf(msg.message, MSG_SIZE, "Processado com sucesso");
-                
-                if (send(cdata->csock, &msg, sizeof(msg), 0) != sizeof(msg))
-                {
-                    printf("[Cliente %d] Erro ao enviar resposta\n", cdata->client_id);
+        switch (msg.type) {
+                case MSG_POST:
+                    pthread_mutex_lock(&id_mutex);
+                    uint32_t id = next_id++;
+                    pthread_mutex_unlock(&id_mutex);
+                    pthread_mutex_lock(&feed_mutex);
+
+                    feed[feed_next].id = id;
+                    strncpy(feed[feed_next].username, msg.username, USER_SIZE);
+                    strncpy(feed[feed_next].content, msg.content, CONTENT_SIZE);
+
+                    feed_next = (feed_next + 1) % FEED_SIZE;
+                    if (feed_count < FEED_SIZE){ 
+                        feed_count++;}
+
+                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
+
+                    pthread_mutex_unlock(&feed_mutex);
                     break;
-                }
-                break;
-                
-            case MSG_DATA:
-                printf("[Cliente %d] Recebeu dados: %s\n", 
-                       cdata->client_id, msg.data);
-                
-                msg.type = MSG_ACK;
-                msg.status = 0;
-                snprintf(msg.message, MSG_SIZE, "Dados recebidos");
-                
-                if (send(cdata->csock, &msg, sizeof(msg), 0) != sizeof(msg))
-                {
-                    printf("[Cliente %d] Erro ao enviar ACK\n", cdata->client_id);
+        
+                case MSG_FOLLOW:
+                    // Processar follow
                     break;
-                }
-                break;
-                
-            case MSG_EXIT:
-                printf("[Cliente %d] Solicitou encerramento\n", cdata->client_id);
-                msg.type = MSG_ACK;
-                send(cdata->csock, &msg, sizeof(msg), 0);
-                close(cdata->csock);
-                free(cdata);
-                pthread_exit(EXIT_SUCCESS);
-                break;
-                
-            default:
-                printf("[Cliente %d] Tipo de mensagem desconhecido: %d\n", 
-                       cdata->client_id, msg.type);
-                msg.type = MSG_ERROR;
-                snprintf(msg.message, MSG_SIZE, "Tipo de mensagem inválido");
-                send(cdata->csock, &msg, sizeof(msg), 0);
-                break;
-        }
+        
+                 case MSG_READ:
+                    pthread_mutex_lock(&feed_mutex);
+
+                    int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;  // começa pela mais recente
+
+                    for (int i = 0; i < feed_count; i++) {
+                        Message push_msg;
+                        push_msg.type = MSG_PUSH;
+                        strncpy(push_msg.username, feed[pos].username, USER_SIZE);
+                        strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
+                        push_msg.msg_id = feed[pos].id;
+                        send(cdata->csock, &push_msg, sizeof(push_msg), 0);
+                        pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;  // vai para a anterior
+                        
+                    }
+                    
+                    pthread_mutex_unlock(&feed_mutex);
+                    break;
+        
+                case MSG_END:
+                        // Cliente quer sair
+                    close(cdata->csock);
+                    free(cdata);
+                    pthread_exit(EXIT_SUCCESS);
+                    break;
+        
+                default:
+                    // Tipo desconhecido - apenas ignore ou log
+                    printf("[Cliente %d] Tipo inválido: %d\n", cdata->client_id, msg.type);
+                    break;
+}
     }
     
     close(cdata->csock);
@@ -179,7 +217,22 @@ int main(int argc, char **argv)
     printf("=====================================\n\n");
     
     int next_client_id = 1;
-    
+    pthread_mutex_lock(&feed_mutex);
+    feed[0].id = 1;
+    strncpy(feed[0].username, "@ariana", USER_SIZE);
+    strncpy(feed[0].content, "primeiro post", CONTENT_SIZE);
+
+    feed[1].id = 2;
+    strncpy(feed[1].username, "@ariana", USER_SIZE);
+    strncpy(feed[1].content, "segundo post", CONTENT_SIZE);
+
+    feed[2].id = 3;
+    strncpy(feed[2].username, "@bfan", USER_SIZE);
+    strncpy(feed[2].content, "terceiro post", CONTENT_SIZE);
+
+    feed_count = 3;
+    feed_next = 3;  // próxima posição a escrever é 3
+    pthread_mutex_unlock(&feed_mutex);
     while (1)
     {
         struct sockaddr_storage cstorage;
