@@ -101,11 +101,11 @@ void *client_thread(void *data)
                     printf("[CONN] %s conectou.\n", msg.username);
                     break;
                 case MSG_POST:
-                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
                     printf("[DEBUG] POST: feed_count passou de %d para %d\n", feed_count - 1, feed_count);
                     pthread_mutex_lock(&id_mutex);
                     uint32_t id = next_id++;
                     pthread_mutex_unlock(&id_mutex);
+                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
                     pthread_mutex_lock(&feed_mutex);
 
                     feed[feed_next].id = id;
