@@ -156,12 +156,13 @@ void *client_thread(void *data)
                     break;
         
                 case MSG_FOLLOW:
-                    
+                    printf("[DEBUG] FOLLOW recebido: username='%s', content='%s'\n", msg.username, msg.content);
                     pthread_mutex_lock(&follows_mutex);
                     FollowNode *follow = malloc(sizeof(FollowNode));
                     if (follow != NULL) {  // sempre verifique se malloc não falhou
                         strncpy(follow->follower, msg.username, USER_SIZE);
                         strncpy(follow->followed, msg.content, USER_SIZE);
+                        printf("[DEBUG] Salvou: follower='%s', followed='%s'\n", follow->follower, follow->followed);
                         follow->next = follows;   // insere no início da lista
                         follows = follow;          // atualiza a cabeça
                     }
