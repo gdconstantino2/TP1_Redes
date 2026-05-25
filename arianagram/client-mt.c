@@ -43,6 +43,7 @@ int main(int argc, char **argv)
     }
 
     printf("Conectado ao servidor Arianagram!\n");
+    
 
     Message msg;
     memset(&msg, 0, sizeof(msg));
@@ -62,6 +63,8 @@ int main(int argc, char **argv)
     printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
+    printf("> ");
+    fflush(stdout);
 
     char input[BUFSZ];
     char command[BUFSZ];
@@ -92,7 +95,7 @@ int main(int argc, char **argv)
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             while (bytes > 0) {
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] @%s: \"%s\"\n", 
+                    printf("\n[NOTIFICATION] %s: \"%s\"\n", 
                            push_msg.username, push_msg.content);
                     fflush(stdout);
                     printf("> ");
@@ -169,10 +172,14 @@ int main(int argc, char **argv)
                 printf("  FOLLOW @user - Segue um usuário\n");
                 printf("  READ - Lê o feed histórico\n");
                 printf("  exit - Encerra conexão\n\n");
+                printf("> ");
+                fflush(stdout);
             }
             else
             {
                 printf("Comando desconhecido. Use 'help'\n");
+                printf("> ");
+                fflush(stdout);
             }
         }
     }
