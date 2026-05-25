@@ -178,7 +178,7 @@ void *client_thread(void *data)
                     break;
         
                 case MSG_END:
-                    printf("[DISC] %s desconectou.\n", cdata->username);
+                    printf("[DISC] %s desconectou.\n", msg.username);
                     close(cdata->csock);
                     free(cdata);
                     pthread_exit(EXIT_SUCCESS);
@@ -193,7 +193,7 @@ void *client_thread(void *data)
     
     close(cdata->csock);
     free(cdata);
-    printf("Cliente %d desconectado\n", cdata->client_id);
+    //printf("Cliente %d desconectado\n", cdata->client_id);
     pthread_exit(EXIT_SUCCESS);
 }
 
