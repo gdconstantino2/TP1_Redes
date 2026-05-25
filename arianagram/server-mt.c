@@ -131,7 +131,9 @@ void *client_thread(void *data)
                                     strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                                     strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
                                     push_msg.msg_id = feed[pos].id;
-    
+                                    printf("[DEBUG] Post: feed_next=%d, pos=%d, id=%u\n", feed_next, pos, id);
+                                    printf("[DEBUG] Procurando seguidores de %s\n", msg.username);
+                                    printf("[DEBUG] Enviando push para %s\n", c->username);
                                     send(c->socket, &push_msg, sizeof(push_msg), 0);
                                 }
                                 c = c->next;
