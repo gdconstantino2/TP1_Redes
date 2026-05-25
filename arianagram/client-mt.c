@@ -67,6 +67,10 @@ int main(int argc, char **argv)
     char command[BUFSZ];
     char argument[BUFSZ];
     
+    // Configura socket como não-bloqueante
+    int flags = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, flags | O_NONBLOCK);
+    
     fd_set readfds;
     int max_fd;
 
@@ -143,25 +147,25 @@ int main(int argc, char **argv)
                 msg.type = MSG_READ;
                 send(s, &msg, sizeof(msg), 0);
                 
-                // Recebe as mensagens do feed (como FEED, não NOTIFICATION)
-                int feed_received = 0;
-                while (1) {
-                    Message feed_msg;
-                    bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
-                    if (bytes <= 0) break;
-                    
+                // Aguarda um pouco para as mensagens chegarem
+                usleep(100000);  // 100ms
+                
+                // Recebe todas as mensagens do feed
+                int count = 0;
+                Message feed_msg;
+                bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
+                while (bytes > 0) {
                     if (feed_msg.type == MSG_PUSH) {
                         printf("[FEED] ID %u | @%s: \"%s\"\n",
                                feed_msg.msg_id, feed_msg.username, feed_msg.content);
-                        feed_received++;
+                        count++;
                     }
+                    bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
                 }
                 
-                // Se não recebeu nada, o feed está vazio
-                if (feed_received == 0) {
+                if (count == 0) {
                     printf("[FEED] Nenhuma mensagem no feed.\n");
                 }
-                
                 fflush(stdout);
             }
             else if (strcmp(command, "help") == 0)
