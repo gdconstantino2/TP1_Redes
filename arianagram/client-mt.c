@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <arpa/inet.h>
 
 #define BUFSZ 1024
 
@@ -42,11 +43,11 @@ int main(int argc, char **argv)
         logexit("connect");
     }
 
-    printf("Conectado ao servidor Arianagram!\n");
+    printf("Conectado ao servidor como %s.\n", argv[3]);
 
     Message msg;
     memset(&msg, 0, sizeof(msg));
-    msg.type = MSG_CONNECT;
+    msg.type = htons(MSG_CONNECT);
     strncpy(msg.username, argv[3], USER_SIZE);
 
     if (send(s, &msg, sizeof(msg), 0) != sizeof(msg))
@@ -54,50 +55,43 @@ int main(int argc, char **argv)
         logexit("send connect");
     }
 
-    printf("Identificado como %s\n", argv[3]);
-
     printf("\nComandos disponíveis:\n");
     printf("  POST <texto> - Publica uma mensagem\n");
     printf("  FOLLOW @user - Segue um usuário\n");
     printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
-    
-    printf("> ");
-    fflush(stdout);
 
     char input[BUFSZ];
     char command[BUFSZ];
     char argument[BUFSZ];
     
-    // Configura socket como não-bloqueante
-    int flags = fcntl(s, F_GETFL, 0);
-    fcntl(s, F_SETFL, flags | O_NONBLOCK);
-    
     fd_set readfds;
     int max_fd;
+    int stdin_ready = 1;
 
     while (1)
     {
-        // Configura os descritores para select()
         FD_ZERO(&readfds);
-        FD_SET(s, &readfds);              // monitora o socket
-        FD_SET(STDIN_FILENO, &readfds);   // monitora o stdin (teclado)
+        FD_SET(s, &readfds);
+        if (stdin_ready) {
+            FD_SET(STDIN_FILENO, &readfds);
+        }
         
         max_fd = (s > STDIN_FILENO) ? s : STDIN_FILENO;
         
-        // Espera atividade em qualquer um dos descritores
         if (select(max_fd + 1, &readfds, NULL, NULL, NULL) < 0) {
             perror("select");
             break;
         }
         
-        // Verifica se há dados no socket (notificação do servidor)
+        // Verifica notificações do servidor
         if (FD_ISSET(s, &readfds)) {
             Message push_msg;
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             while (bytes > 0) {
-                if (push_msg.type == MSG_PUSH) {
+                uint16_t type = ntohs(push_msg.type);
+                if (type == MSG_PUSH) {
                     printf("\n[NOTIFICATION] @%s: \"%s\"\n", 
                            push_msg.username, push_msg.content);
                     fflush(stdout);
@@ -108,7 +102,7 @@ int main(int argc, char **argv)
             }
         }
         
-        // Verifica se há comando do usuário
+        // Verifica comando do usuário
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
             printf("> ");
             fflush(stdout);
@@ -127,47 +121,46 @@ int main(int argc, char **argv)
 
             if (strcmp(command, "exit") == 0)
             {
-                msg.type = MSG_END;
+                msg.type = htons(MSG_END);
                 send(s, &msg, sizeof(msg), 0);
                 break;
             }
             else if (strcmp(command, "POST") == 0)
             {
-                msg.type = MSG_POST;
+                msg.type = htons(MSG_POST);
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
             }
             else if (strcmp(command, "FOLLOW") == 0)
             {
-                msg.type = MSG_FOLLOW;
+                msg.type = htons(MSG_FOLLOW);
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
             }
             else if (strcmp(command, "READ") == 0)
             {
-                msg.type = MSG_READ;
+                msg.type = htons(MSG_READ);
                 send(s, &msg, sizeof(msg), 0);
                 
-                // Aguarda um pouco para as mensagens chegarem
-                usleep(100000);  // 100ms
-                
-                // Recebe todas as mensagens do feed
+                // Recebe mensagens até MSG_END
                 int count = 0;
-                Message feed_msg;
-                bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
-                while (bytes > 0) {
-                    if (feed_msg.type == MSG_PUSH) {
+                while (1) {
+                    Message feed_msg;
+                    bytes = recv(s, &feed_msg, sizeof(feed_msg), 0);
+                    if (bytes <= 0) break;
+                    
+                    uint16_t type = ntohs(feed_msg.type);
+                    if (type == MSG_PUSH) {
+                        uint32_t msg_id = ntohl(feed_msg.msg_id);
                         printf("[FEED] ID %u | @%s: \"%s\"\n",
-                               feed_msg.msg_id, feed_msg.username, feed_msg.content);
+                               msg_id, feed_msg.username, feed_msg.content);
                         count++;
                     }
-                    bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
-                }
-                
-                if (count == 0) {
-                    printf("[FEED] Nenhuma mensagem no feed.\n");
+                    else if (type == MSG_END) {
+                        break;
+                    }
                 }
                 fflush(stdout);
             }
