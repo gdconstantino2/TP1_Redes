@@ -54,6 +54,7 @@ struct client_data
     int csock;
     struct sockaddr_storage storage;
     int client_id;
+    char username[USER_SIZE];
 };
 
 void *client_thread(void *data)
@@ -87,6 +88,7 @@ void *client_thread(void *data)
         // Processa mensagem baseado no tipo
         switch (msg.type) {
                 case MSG_CONNECT:
+                    strncpy(cdata->username, msg.username, USER_SIZE);
                     pthread_mutex_lock(&clients_mutex);
                     ClientNode *client = malloc(sizeof(ClientNode));
                     if (client != NULL) {
@@ -122,9 +124,15 @@ void *client_thread(void *data)
                             ClientNode *c = clients;
                             while (c != NULL) {
                                 if (strcmp(c->username, f->follower) == 0) {
-                                     int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
-                                     push_msg.msg_id = feed[pos].id;
-                                     pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;
+                                    int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
+    
+                                    Message push_msg;
+                                    push_msg.type = MSG_PUSH;
+                                    strncpy(push_msg.username, feed[pos].username, USER_SIZE);
+                                    strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
+                                    push_msg.msg_id = feed[pos].id;
+    
+                                    send(c->socket, &push_msg, sizeof(push_msg), 0);
                                 }
                                 c = c->next;
                             }   
