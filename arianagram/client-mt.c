@@ -112,7 +112,7 @@ int main(int argc, char **argv)
             strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
         }
-        /*else if (strcmp(command, "READ") == 0)
+        else if (strcmp(command, "READ") == 0)
         {
             msg.type = MSG_READ;
             send(s, &msg, sizeof(msg), 0);
@@ -131,7 +131,7 @@ int main(int argc, char **argv)
                            push_msg.msg_id, push_msg.username, push_msg.content);
                 }
             }
-        }*/
+        }
         else if (strcmp(command, "help") == 0)
         {
             printf("\nComandos:\n");
