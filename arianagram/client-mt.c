@@ -91,10 +91,8 @@ int main(int argc, char **argv)
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             while (bytes > 0) {
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] @%s: \"%s\"\n", 
+                    printf("\n[NOTIFICATION] %s: \"%s\"\n", 
                            push_msg.username, push_msg.content);
-                    fflush(stdout);
-                    printf("> ");
                     fflush(stdout);
                 }
                 bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
