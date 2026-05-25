@@ -117,7 +117,7 @@ void *client_thread(void *data)
                     printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
                     pthread_mutex_lock(&follows_mutex);
                     FollowNode *f = follows;
-                    printf("[DEBUG] Percorrendo follows...\n")
+                    printf("[DEBUG] Percorrendo follows...\n");
                     while (f != NULL) {
                         printf("[DEBUG] Follow: %s -> %s\n", f->follower, f->followed);
                         if (strcmp(f->followed, msg.username) == 0) {
