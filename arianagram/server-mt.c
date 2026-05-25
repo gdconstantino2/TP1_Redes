@@ -6,7 +6,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <arpa/inet.h>
 
 #define BUFSZ 1024
 #define FEED_SIZE 5
@@ -45,7 +44,7 @@ static pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void usage(int argc, char **argv)
 {
-    fprintf(stderr, "Uso: %s <porta>\n", argv[0]);
+    fprintf(stderr, "Uso: %s <v4|v6> <porta>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -64,9 +63,11 @@ void *client_thread(void *data)
     
     char caddrstr[BUFSZ];
     addrtostr(caddr, caddrstr, BUFSZ);
+    printf("[Cliente %d] Conectado de %s\n", cdata->client_id, caddrstr);
     
     Message msg;
     memset(&msg, 0, sizeof(Message));
+    
     ssize_t bytes_received;
 
     while (1)
@@ -77,10 +78,6 @@ void *client_thread(void *data)
             printf("[DISC] %s desconectou.\n", cdata->username);
             break;
         }
-        
-        // Converte endianness dos campos recebidos
-        msg.type = ntohs(msg.type);
-        msg.msg_id = ntohl(msg.msg_id);
         
         switch (msg.type) {
             case MSG_CONNECT:
@@ -108,12 +105,10 @@ void *client_thread(void *data)
                 strncpy(feed[feed_next].content, msg.content, CONTENT_SIZE);
 
                 feed_next = (feed_next + 1) % FEED_SIZE;
-                if (feed_count < FEED_SIZE) { 
-                    feed_count++;
-                }
+                if (feed_count < FEED_SIZE){ 
+                    feed_count++;}
 
                 printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
-                
                 pthread_mutex_lock(&follows_mutex);
                 FollowNode *f = follows;
                 while (f != NULL) {
@@ -121,17 +116,14 @@ void *client_thread(void *data)
                         pthread_mutex_lock(&clients_mutex);
                         ClientNode *c = clients;
                         while (c != NULL) {
-                            if (strcmp(c->username, f->follower) == 0 && 
-                                strcmp(c->username, msg.username) != 0) {
-                                
+                            if (strcmp(c->username, f->follower) == 0 && strcmp(c->username, msg.username) != 0) {
                                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
                                 
                                 Message push_msg;
-                                memset(&push_msg, 0, sizeof(push_msg));
-                                push_msg.type = htons(MSG_PUSH);
+                                push_msg.type = MSG_PUSH;
                                 strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                                 strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                                push_msg.msg_id = htonl(feed[pos].id);
+                                push_msg.msg_id = feed[pos].id;
                                 
                                 send(c->socket, &push_msg, sizeof(push_msg), 0);
                             }
@@ -146,55 +138,29 @@ void *client_thread(void *data)
                 break;
         
             case MSG_FOLLOW:
-                // Ignorar auto-follow
-                if (strcmp(msg.username, msg.content) == 0) {
-                    break;
-                }
                 pthread_mutex_lock(&follows_mutex);
-                // Verificar se já existe (evitar duplicados)
-                FollowNode *existing = follows;
-                int already_follows = 0;
-                while (existing != NULL) {
-                    if (strcmp(existing->follower, msg.username) == 0 &&
-                        strcmp(existing->followed, msg.content) == 0) {
-                        already_follows = 1;
-                        break;
-                    }
-                    existing = existing->next;
-                }
-                if (!already_follows) {
-                    FollowNode *follow = malloc(sizeof(FollowNode));
-                    if (follow != NULL) {
-                        strncpy(follow->follower, msg.username, USER_SIZE);
-                        strncpy(follow->followed, msg.content, USER_SIZE);
-                        follow->next = follows;
-                        follows = follow;
-                    }
+                FollowNode *follow = malloc(sizeof(FollowNode));
+                if (follow != NULL) {
+                    strncpy(follow->follower, msg.username, USER_SIZE);
+                    strncpy(follow->followed, msg.content, USER_SIZE);
+                    follow->next = follows;
+                    follows = follow;
                 }
                 pthread_mutex_unlock(&follows_mutex);
                 break;
         
             case MSG_READ:
                 pthread_mutex_lock(&feed_mutex);
-
                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
                 for (int i = 0; i < feed_count; i++) {
                     Message push_msg;
-                    memset(&push_msg, 0, sizeof(push_msg));
-                    push_msg.type = htons(MSG_PUSH);
+                    push_msg.type = MSG_PUSH;
                     strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                     strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                    push_msg.msg_id = htonl(feed[pos].id);
+                    push_msg.msg_id = feed[pos].id;
                     send(cdata->csock, &push_msg, sizeof(push_msg), 0);
                     pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;
                 }
-                
-                // Envia MSG_END para sinalizar fim do feed
-                Message end_msg;
-                memset(&end_msg, 0, sizeof(end_msg));
-                end_msg.type = htons(MSG_END);
-                send(cdata->csock, &end_msg, sizeof(end_msg), 0);
-                
                 pthread_mutex_unlock(&feed_mutex);
                 break;
         
@@ -216,43 +182,41 @@ void *client_thread(void *data)
 
 int main(int argc, char **argv)
 {
-    if (argc != 2)
+    if (argc != 3)
     {
         usage(argc, argv);
     }
     
-    int port = atoi(argv[1]);
-    if (port == 0) {
+    struct sockaddr_storage storage;
+    if (0 != server_sockaddr_init(argv[1], argv[2], &storage))
+    {
         usage(argc, argv);
     }
     
-    // Criar socket para IPv6 (aceita IPv4 também)
-    int s = socket(AF_INET6, SOCK_STREAM, 0);
-    if (s == -1) {
+    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    if (s == -1)
+    {
         logexit("socket");
     }
     
-    // Permitir IPv4 e IPv6 no mesmo socket
     int opt = 1;
-    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) {
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
         logexit("setsockopt");
     }
     
-    struct sockaddr_in6 addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(port);
-    
-    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+    struct sockaddr *addr = (struct sockaddr *)(&storage);
+    if (0 != bind(s, addr, sizeof(storage)))
+    {
         logexit("bind");
     }
     
-    if (listen(s, 128) != 0) {
+    if (0 != listen(s, 128))
+    {
         logexit("listen");
     }
     
-    printf("Aguardando conexoes na porta %d.\n", port);
+    printf("Aguardando conexoes na porta %s.\n", argv[2]);
     
     int next_client_id = 1;
     while (1)
@@ -262,21 +226,24 @@ int main(int argc, char **argv)
         socklen_t caddrlen = sizeof(cstorage);
         
         int csock = accept(s, caddr, &caddrlen);
-        if (csock == -1) {
+        if (csock == -1)
+        {
             logexit("accept");
         }
         
         struct client_data *cdata = malloc(sizeof(*cdata));
-        if (!cdata) {
+        if (!cdata)
+        {
             logexit("malloc");
         }
         
         cdata->csock = csock;
         cdata->client_id = next_client_id++;
-        memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
+        memcpy(&(cdata->storage), &cstorage, sizeof(storage));
         
         pthread_t tid;
-        if (pthread_create(&tid, NULL, client_thread, cdata) != 0) {
+        if (pthread_create(&tid, NULL, client_thread, cdata) != 0)
+        {
             perror("pthread_create");
             close(csock);
             free(cdata);
