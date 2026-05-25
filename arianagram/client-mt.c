@@ -106,12 +106,14 @@ int main(int argc, char **argv)
         else if (strcmp(command, "POST") == 0)
         {
             msg.type = MSG_POST;
+            strncpy(msg.username, argv[3], USER_SIZE);
             strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
         }
         else if (strcmp(command, "FOLLOW") == 0)
         {
             msg.type = MSG_FOLLOW;
+            strncpy(msg.username, argv[3], USER_SIZE);
             strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
         }
