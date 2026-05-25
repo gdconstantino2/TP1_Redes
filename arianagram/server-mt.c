@@ -171,10 +171,12 @@ void *client_thread(void *data)
         
                  case MSG_READ:
                     pthread_mutex_lock(&feed_mutex);
+                    printf("[DEBUG] READ: feed_count=%d, feed_next=%d\n", feed_count, feed_next);
 
                     int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;  // começa pela mais recente
 
                     for (int i = 0; i < feed_count; i++) {
+                        printf("[DEBUG] READ enviando: ID %u, user %s, content %s\n", feed[pos].id, feed[pos].username, feed[pos].content);
                         Message push_msg;
                         push_msg.type = MSG_PUSH;
                         strncpy(push_msg.username, feed[pos].username, USER_SIZE);
