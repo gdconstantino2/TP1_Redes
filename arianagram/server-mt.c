@@ -81,7 +81,7 @@ void *client_thread(void *data)
         bytes_received = recv(cdata->csock, &msg, sizeof(msg), 0);
         if (bytes_received <= 0)
         {
-            printf("[DISC] @usuario desconectou.\n", cdata->client_id);
+            printf("[DISC] %s desconectou.\n", cdata->username);
             break;
         }
         
@@ -114,7 +114,7 @@ void *client_thread(void *data)
                     if (feed_count < FEED_SIZE){ 
                         feed_count++;}
 
-                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
+                    //printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
                     pthread_mutex_lock(&follows_mutex);
                     FollowNode *f = follows;
                     while (f != NULL) {
