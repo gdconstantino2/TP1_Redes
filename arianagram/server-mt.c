@@ -117,13 +117,19 @@ void *client_thread(void *data)
                     printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
                     pthread_mutex_lock(&follows_mutex);
                     FollowNode *f = follows;
+                    printf("[DEBUG] Percorrendo follows...\n")
                     while (f != NULL) {
+                        printf("[DEBUG] Follow: %s -> %s\n", f->follower, f->followed);
                         if (strcmp(f->followed, msg.username) == 0) {
+                              printf("[DEBUG] Encontrou! %s segue %s\n", f->follower, f->followed);
         
                             pthread_mutex_lock(&clients_mutex);
                             ClientNode *c = clients;
+                            printf("[DEBUG] Percorrendo clients...\n");
                             while (c != NULL) {
+                                printf("[DEBUG] Client: %s (socket %d)\n", c->username, c->socket);
                                 if (strcmp(c->username, f->follower) == 0 && strcmp(c->username, msg.username) != 0) {
+                                     printf("[DEBUG] Vai enviar push para %s!\n", c->username);
                                     int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
     
                                     printf("[DEBUG] feed_next=%d, pos=%d, id=%u\n", feed_next, pos, id);
