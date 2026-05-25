@@ -254,22 +254,6 @@ int main(int argc, char **argv)
     printf("=====================================\n\n");
     
     int next_client_id = 1;
-    pthread_mutex_lock(&feed_mutex);
-    feed[0].id = 1;
-    strncpy(feed[0].username, "@ariana", USER_SIZE);
-    strncpy(feed[0].content, "primeiro post", CONTENT_SIZE);
-
-    feed[1].id = 2;
-    strncpy(feed[1].username, "@ariana", USER_SIZE);
-    strncpy(feed[1].content, "segundo post", CONTENT_SIZE);
-
-    feed[2].id = 3;
-    strncpy(feed[2].username, "@bfan", USER_SIZE);
-    strncpy(feed[2].content, "terceiro post", CONTENT_SIZE);
-
-    feed_count = 3;
-    feed_next = 3;  // próxima posição a escrever é 3
-    pthread_mutex_unlock(&feed_mutex);
     while (1)
     {
         struct sockaddr_storage cstorage;
