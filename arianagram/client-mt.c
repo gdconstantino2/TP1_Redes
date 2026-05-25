@@ -62,6 +62,9 @@ int main(int argc, char **argv)
     printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
+    fflush(stdout);
+    printf("> ");
+    fflush(stdout);
 
     char input[BUFSZ];
     char command[BUFSZ];
@@ -94,7 +97,7 @@ int main(int argc, char **argv)
                     printf("\n[NOTIFICATION] %s: \"%s\"\n", 
                            push_msg.username, push_msg.content);
                     fflush(stdout);
-                    printf(">");
+                    printf("> ");
                     fflush(stdout);
                 }
                 bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
