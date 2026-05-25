@@ -81,7 +81,7 @@ void *client_thread(void *data)
         bytes_received = recv(cdata->csock, &msg, sizeof(msg), 0);
         if (bytes_received <= 0)
         {
-            printf("[Cliente %d] Desconectou\n", cdata->client_id);
+            printf("[DISC] @usuario desconectou.\n", cdata->client_id);
             break;
         }
         
@@ -98,7 +98,7 @@ void *client_thread(void *data)
                         clients = client;          
                     }
                     pthread_mutex_unlock(&clients_mutex);
-                    printf("[CONN] @%s conectou.\n", msg.username);
+                    printf("[CONN] %s conectou.\n", msg.username);
                     break;
                 case MSG_POST:
                     pthread_mutex_lock(&id_mutex);
@@ -178,7 +178,7 @@ void *client_thread(void *data)
                     break;
         
                 case MSG_END:
-                        // Cliente quer sair
+                    printf("[DISC] %s desconectou.\n", cdata->username);
                     close(cdata->csock);
                     free(cdata);
                     pthread_exit(EXIT_SUCCESS);
