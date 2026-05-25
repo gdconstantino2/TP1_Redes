@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 
 #define BUFSZ 1024
 #define FEED_SIZE 5
@@ -16,7 +17,7 @@ typedef struct ClientNode {
     struct ClientNode *next;
 } ClientNode;
 
-static ClientNode *clients = NULL;  // head da lista
+static ClientNode *clients = NULL;
 static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
@@ -42,10 +43,9 @@ static int feed_next = 0;
 static pthread_mutex_t feed_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
 void usage(int argc, char **argv)
 {
-    fprintf(stderr, "Uso: %s <v4|v6> <porta>\n", argv[0]);
+    fprintf(stderr, "Uso: %s <porta>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -64,18 +64,11 @@ void *client_thread(void *data)
     
     char caddrstr[BUFSZ];
     addrtostr(caddr, caddrstr, BUFSZ);
-    printf("[Cliente %d] Conectado de %s\n", cdata->client_id, caddrstr);
     
     Message msg;
     memset(&msg, 0, sizeof(Message));
-    
-    
-    printf("[Cliente %d] Handshake realizado\n", cdata->client_id);
-    
-    //int sequence = 0;
     ssize_t bytes_received;
 
-    
     while (1)
     {
         bytes_received = recv(cdata->csock, &msg, sizeof(msg), 0);
@@ -85,188 +78,181 @@ void *client_thread(void *data)
             break;
         }
         
-        // Processa mensagem baseado no tipo
+        // Converte endianness dos campos recebidos
+        msg.type = ntohs(msg.type);
+        msg.msg_id = ntohl(msg.msg_id);
+        
         switch (msg.type) {
-                case MSG_CONNECT:
-                    strncpy(cdata->username, msg.username, USER_SIZE);
-                    pthread_mutex_lock(&clients_mutex);
-                    ClientNode *client = malloc(sizeof(ClientNode));
-                    if (client != NULL) {
-                        client->socket = cdata->csock;
-                        strncpy(client->username, msg.username, USER_SIZE);
-                        client->next = clients; 
-                        clients = client;          
+            case MSG_CONNECT:
+                strncpy(cdata->username, msg.username, USER_SIZE);
+                pthread_mutex_lock(&clients_mutex);
+                ClientNode *client = malloc(sizeof(ClientNode));
+                if (client != NULL) {
+                    client->socket = cdata->csock;
+                    strncpy(client->username, msg.username, USER_SIZE);
+                    client->next = clients; 
+                    clients = client;          
+                }
+                pthread_mutex_unlock(&clients_mutex);
+                printf("[CONN] %s conectou.\n", msg.username);
+                break;
+                
+            case MSG_POST:
+                pthread_mutex_lock(&id_mutex);
+                uint32_t id = next_id++;
+                pthread_mutex_unlock(&id_mutex);
+                pthread_mutex_lock(&feed_mutex);
+
+                feed[feed_next].id = id;
+                strncpy(feed[feed_next].username, msg.username, USER_SIZE);
+                strncpy(feed[feed_next].content, msg.content, CONTENT_SIZE);
+
+                feed_next = (feed_next + 1) % FEED_SIZE;
+                if (feed_count < FEED_SIZE) { 
+                    feed_count++;
+                }
+
+                printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
+                
+                pthread_mutex_lock(&follows_mutex);
+                FollowNode *f = follows;
+                while (f != NULL) {
+                    if (strcmp(f->followed, msg.username) == 0) {
+                        pthread_mutex_lock(&clients_mutex);
+                        ClientNode *c = clients;
+                        while (c != NULL) {
+                            if (strcmp(c->username, f->follower) == 0 && 
+                                strcmp(c->username, msg.username) != 0) {
+                                
+                                int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
+                                
+                                Message push_msg;
+                                memset(&push_msg, 0, sizeof(push_msg));
+                                push_msg.type = htons(MSG_PUSH);
+                                strncpy(push_msg.username, feed[pos].username, USER_SIZE);
+                                strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
+                                push_msg.msg_id = htonl(feed[pos].id);
+                                
+                                send(c->socket, &push_msg, sizeof(push_msg), 0);
+                            }
+                            c = c->next;
+                        }   
+                        pthread_mutex_unlock(&clients_mutex);
                     }
-                    pthread_mutex_unlock(&clients_mutex);
-                    printf("[CONN] %s conectou.\n", msg.username);
+                    f = f->next;
+                }
+                pthread_mutex_unlock(&follows_mutex);
+                pthread_mutex_unlock(&feed_mutex);
+                break;
+        
+            case MSG_FOLLOW:
+                // Ignorar auto-follow
+                if (strcmp(msg.username, msg.content) == 0) {
                     break;
-                case MSG_POST:
-                    printf("[DEBUG] POST: feed_count passou de %d para %d\n", feed_count - 1, feed_count);
-                    pthread_mutex_lock(&id_mutex);
-                    uint32_t id = next_id++;
-                    pthread_mutex_unlock(&id_mutex);
-                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
-                    pthread_mutex_lock(&feed_mutex);
-
-                    feed[feed_next].id = id;
-                    strncpy(feed[feed_next].username, msg.username, USER_SIZE);
-                    strncpy(feed[feed_next].content, msg.content, CONTENT_SIZE);
-
-                    feed_next = (feed_next + 1) % FEED_SIZE;
-                    if (feed_count < FEED_SIZE){ 
-                        feed_count++;}
-
-                    printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
-                    pthread_mutex_lock(&follows_mutex);
-                    FollowNode *f = follows;
-                    printf("[DEBUG] Percorrendo follows...\n");
-                    while (f != NULL) {
-                        printf("[DEBUG] Follow: %s -> %s\n", f->follower, f->followed);
-                        if (strcmp(f->followed, msg.username) == 0) {
-                              printf("[DEBUG] Encontrou! %s segue %s\n", f->follower, f->followed);
-        
-                            pthread_mutex_lock(&clients_mutex);
-                            ClientNode *c = clients;
-                            printf("[DEBUG] Percorrendo clients...\n");
-                            while (c != NULL) {
-                                printf("[DEBUG] Client: %s (socket %d)\n", c->username, c->socket);
-                                if (strcmp(c->username, f->follower) == 0 && strcmp(c->username, msg.username) != 0) {
-                                     printf("[DEBUG] Vai enviar push para %s!\n", c->username);
-                                    int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
-    
-                                    printf("[DEBUG] feed_next=%d, pos=%d, id=%u\n", feed_next, pos, id);
-                                    printf("[DEBUG] Salvou na posição %d (anterior a feed_next)\n", pos);
-                                    printf("[DEBUG] Enviando push para %s\n", c->username);
-    
-                                    Message push_msg;
-                                    push_msg.type = MSG_PUSH;
-                                    strncpy(push_msg.username, feed[pos].username, USER_SIZE);
-                                    strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                                    push_msg.msg_id = feed[pos].id;
-    
-                                    send(c->socket, &push_msg, sizeof(push_msg), 0);
-                                }
-                                c = c->next;
-                            }   
-                            pthread_mutex_unlock(&clients_mutex);
-        
-                        }
-                        f = f->next;
-                        }
-                    pthread_mutex_unlock(&follows_mutex);
-                    pthread_mutex_unlock(&feed_mutex);
-                    break;
-        
-                case MSG_FOLLOW:
-                    printf("[DEBUG] FOLLOW recebido: username='%s', content='%s'\n", msg.username, msg.content);
-                    pthread_mutex_lock(&follows_mutex);
+                }
+                pthread_mutex_lock(&follows_mutex);
+                // Verificar se já existe (evitar duplicados)
+                FollowNode *existing = follows;
+                int already_follows = 0;
+                while (existing != NULL) {
+                    if (strcmp(existing->follower, msg.username) == 0 &&
+                        strcmp(existing->followed, msg.content) == 0) {
+                        already_follows = 1;
+                        break;
+                    }
+                    existing = existing->next;
+                }
+                if (!already_follows) {
                     FollowNode *follow = malloc(sizeof(FollowNode));
-                    if (follow != NULL) {  // sempre verifique se malloc não falhou
+                    if (follow != NULL) {
                         strncpy(follow->follower, msg.username, USER_SIZE);
                         strncpy(follow->followed, msg.content, USER_SIZE);
-                        printf("[DEBUG] Salvou: follower='%s', followed='%s'\n", follow->follower, follow->followed);
-                        follow->next = follows;   // insere no início da lista
-                        follows = follow;          // atualiza a cabeça
+                        follow->next = follows;
+                        follows = follow;
                     }
-                    pthread_mutex_unlock(&follows_mutex);
-                    break;
+                }
+                pthread_mutex_unlock(&follows_mutex);
+                break;
         
-                 case MSG_READ:
-                    pthread_mutex_lock(&feed_mutex);
-                    printf("[DEBUG] READ: feed_count = %d\n", feed_count);
+            case MSG_READ:
+                pthread_mutex_lock(&feed_mutex);
 
-                    int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;  // começa pela mais recente
-
-                    for (int i = 0; i < feed_count; i++) {
-                        printf("[DEBUG] Enviando mensagem %d de %d: ID %u, user %s\n", i+1, feed_count, feed[pos].id, feed[pos].username);
-                        Message push_msg;
-                        push_msg.type = MSG_PUSH;
-                        strncpy(push_msg.username, feed[pos].username, USER_SIZE);
-                        strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                        push_msg.msg_id = feed[pos].id;
-                        send(cdata->csock, &push_msg, sizeof(push_msg), 0);
-                        pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;  // vai para a anterior
-                        
-                    }
-                    
-                    pthread_mutex_unlock(&feed_mutex);
-                    break;
+                int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
+                for (int i = 0; i < feed_count; i++) {
+                    Message push_msg;
+                    memset(&push_msg, 0, sizeof(push_msg));
+                    push_msg.type = htons(MSG_PUSH);
+                    strncpy(push_msg.username, feed[pos].username, USER_SIZE);
+                    strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
+                    push_msg.msg_id = htonl(feed[pos].id);
+                    send(cdata->csock, &push_msg, sizeof(push_msg), 0);
+                    pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;
+                }
+                
+                // Envia MSG_END para sinalizar fim do feed
+                Message end_msg;
+                memset(&end_msg, 0, sizeof(end_msg));
+                end_msg.type = htons(MSG_END);
+                send(cdata->csock, &end_msg, sizeof(end_msg), 0);
+                
+                pthread_mutex_unlock(&feed_mutex);
+                break;
         
-                case MSG_END:
-                    printf("[DISC] %s desconectou.\n", msg.username);
-                    close(cdata->csock);
-                    free(cdata);
-                    pthread_exit(EXIT_SUCCESS);
-                    break;
+            case MSG_END:
+                close(cdata->csock);
+                free(cdata);
+                pthread_exit(EXIT_SUCCESS);
+                break;
         
-                default:
-                    // Tipo desconhecido - apenas ignore ou log
-                    printf("[Cliente %d] Tipo inválido: %d\n", cdata->client_id, msg.type);
-                    break;
-}
+            default:
+                break;
+        }
     }
     
     close(cdata->csock);
     free(cdata);
-    
     pthread_exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc != 2)
     {
         usage(argc, argv);
     }
     
-    struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(argv[1], argv[2], &storage))
-    {
+    int port = atoi(argv[1]);
+    if (port == 0) {
         usage(argc, argv);
     }
     
-    int s;
-    s = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (s == -1)
-    {
+    // Criar socket para IPv6 (aceita IPv4 também)
+    int s = socket(AF_INET6, SOCK_STREAM, 0);
+    if (s == -1) {
         logexit("socket");
     }
     
+    // Permitir IPv4 e IPv6 no mesmo socket
     int opt = 1;
-    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-    {
+    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) {
         logexit("setsockopt");
     }
     
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != bind(s, addr, sizeof(storage)))
-    {
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any;
+    addr.sin6_port = htons(port);
+    
+    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
         logexit("bind");
     }
     
-    // Backlog 128 é um valor razoável para fila de conexões pendentes
-    // Não limita o número de clientes simultâneos
-    if (0 != listen(s, 128))
-    {
+    if (listen(s, 128) != 0) {
         logexit("listen");
     }
     
-    char addrstr[BUFSZ];
-    addrtostr(addr, addrstr, BUFSZ);
-    
-    const char *ip_versao;
-    if (strcmp(argv[1], "v4") == 0)
-        ip_versao = "4";
-    else if (strcmp(argv[1], "v6") == 0)
-        ip_versao = "6";
-    else
-        exit(EXIT_FAILURE);
-    
-    printf("=== SERVIDOR MULTITHREAD GENÉRICO ===\n");
-    printf("Modo: IPv%s\n", ip_versao);
-    printf("Porta: %s\n", argv[2]);
-    printf("Aguardando conexões... (sem limite de clientes)\n");
-    printf("=====================================\n\n");
+    printf("Aguardando conexoes na porta %d.\n", port);
     
     int next_client_id = 1;
     while (1)
@@ -276,24 +262,21 @@ int main(int argc, char **argv)
         socklen_t caddrlen = sizeof(cstorage);
         
         int csock = accept(s, caddr, &caddrlen);
-        if (csock == -1)
-        {
+        if (csock == -1) {
             logexit("accept");
         }
         
         struct client_data *cdata = malloc(sizeof(*cdata));
-        if (!cdata)
-        {
+        if (!cdata) {
             logexit("malloc");
         }
         
         cdata->csock = csock;
         cdata->client_id = next_client_id++;
-        memcpy(&(cdata->storage), &cstorage, sizeof(storage));
+        memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
         
         pthread_t tid;
-        if (pthread_create(&tid, NULL, client_thread, cdata) != 0)
-        {
+        if (pthread_create(&tid, NULL, client_thread, cdata) != 0) {
             perror("pthread_create");
             close(csock);
             free(cdata);
