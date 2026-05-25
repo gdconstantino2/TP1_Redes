@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define BUFSZ 1024
 
@@ -64,9 +65,20 @@ int main(int argc, char **argv)
     char input[BUFSZ];
     char command[BUFSZ];
     char argument[BUFSZ];
-
+    int flags = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, flags | O_NONBLOCK);
+    
     while (1)
     {
+         Message push_msg;
+        bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
+        while (bytes > 0) {
+            if (push_msg.type == MSG_PUSH) {
+                printf("[NOTIFICATION] @%s: \"%s\"\n", 
+                   push_msg.username, push_msg.content);
+            }
+            bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
+        }
         printf("> ");
         fflush(stdout);
 
@@ -100,7 +112,7 @@ int main(int argc, char **argv)
             strncpy(msg.content, argument, CONTENT_SIZE);
             send(s, &msg, sizeof(msg), 0);
         }
-        else if (strcmp(command, "READ") == 0)
+        /*else if (strcmp(command, "READ") == 0)
         {
             msg.type = MSG_READ;
             send(s, &msg, sizeof(msg), 0);
@@ -119,7 +131,7 @@ int main(int argc, char **argv)
                            push_msg.msg_id, push_msg.username, push_msg.content);
                 }
             }
-        }
+        }*/
         else if (strcmp(command, "help") == 0)
         {
             printf("\nComandos:\n");
