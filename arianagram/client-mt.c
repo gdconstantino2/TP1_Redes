@@ -62,9 +62,6 @@ int main(int argc, char **argv)
     printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
-    fflush(stdout);
-    printf("> ");
-    fflush(stdout);
 
     char input[BUFSZ];
     char command[BUFSZ];
@@ -94,7 +91,7 @@ int main(int argc, char **argv)
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             while (bytes > 0) {
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] %s: \"%s\"\n", 
+                    printf("\n[NOTIFICATION] @%s: \"%s\"\n", 
                            push_msg.username, push_msg.content);
                     fflush(stdout);
                     printf("> ");
@@ -145,6 +142,27 @@ int main(int argc, char **argv)
             {
                 msg.type = MSG_READ;
                 send(s, &msg, sizeof(msg), 0);
+                
+                // Recebe as mensagens do feed (como FEED, não NOTIFICATION)
+                int feed_received = 0;
+                while (1) {
+                    Message feed_msg;
+                    bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
+                    if (bytes <= 0) break;
+                    
+                    if (feed_msg.type == MSG_PUSH) {
+                        printf("[FEED] ID %u | @%s: \"%s\"\n",
+                               feed_msg.msg_id, feed_msg.username, feed_msg.content);
+                        feed_received++;
+                    }
+                }
+                
+                // Se não recebeu nada, o feed está vazio
+                if (feed_received == 0) {
+                    printf("[FEED] Nenhuma mensagem no feed.\n");
+                }
+                
+                fflush(stdout);
             }
             else if (strcmp(command, "help") == 0)
             {
