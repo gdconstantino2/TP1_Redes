@@ -62,6 +62,9 @@ int main(int argc, char **argv)
     printf("  READ - Lê o feed histórico\n");
     printf("  exit - Encerra conexão\n");
     printf("  help - Mostra ajuda\n\n");
+    
+    printf("> ");
+    fflush(stdout);
 
     char input[BUFSZ];
     char command[BUFSZ];
