@@ -193,7 +193,7 @@ void *client_thread(void *data)
     
     close(cdata->csock);
     free(cdata);
-    //printf("Cliente %d desconectado\n", cdata->client_id);
+    
     pthread_exit(EXIT_SUCCESS);
 }
 
