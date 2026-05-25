@@ -123,7 +123,7 @@ void *client_thread(void *data)
                             pthread_mutex_lock(&clients_mutex);
                             ClientNode *c = clients;
                             while (c != NULL) {
-                                if (strcmp(c->username, f->follower) == 0) {
+                                if (strcmp(c->username, f->follower) == 0 && strcmp(c->username, msg.username) != 0) {
                                     int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
     
                                     Message push_msg;
