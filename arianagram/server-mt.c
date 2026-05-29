@@ -36,8 +36,8 @@ static pthread_mutex_t follows_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static FeedEntry feed[FEED_SIZE];
 static uint32_t next_id = 1;
-static int feed_count = 0;      
-static int feed_next = 0;       
+static int feed_count = 0;
+static int feed_next = 0;
 
 static pthread_mutex_t feed_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -56,7 +56,6 @@ struct client_data
     char username[USER_SIZE];
 };
 
-// Função para remover cliente da lista de clientes ativos
 void remove_client(int socket)
 {
     pthread_mutex_lock(&clients_mutex);
@@ -82,77 +81,75 @@ void *client_thread(void *data)
 {
     struct client_data *cdata = (struct client_data *)data;
     struct sockaddr *caddr = (struct sockaddr *)(&cdata->storage);
-    
+
     char caddrstr[BUFSZ];
     addrtostr(caddr, caddrstr, BUFSZ);
-    
+
     Message msg;
     memset(&msg, 0, sizeof(Message));
     ssize_t bytes_received;
 
-    while (1)
-    {
+    while (1) {
         bytes_received = recv(cdata->csock, &msg, sizeof(msg), 0);
-        if (bytes_received <= 0)
-        {
+        if (bytes_received <= 0) {
             printf("[DISC] %s desconectou.\n", cdata->username);
             remove_client(cdata->csock);
             break;
         }
-        
+
         switch (msg.type) {
             case MSG_CONNECT:
-    // 1. Remove cliente antigo com mesmo username (se existir)
-    pthread_mutex_lock(&clients_mutex);
-    ClientNode *prev = NULL;
-    ClientNode *curr = clients;
-    while (curr != NULL) {
-        if (strcmp(curr->username, msg.username) == 0) {
-            if (prev == NULL) {
-                clients = curr->next;
-            } else {
-                prev->next = curr->next;
-            }
-            close(curr->socket);  // fecha socket antigo
-            free(curr);
-            printf("[DEBUG] Cliente antigo %s removido.\n", msg.username);
-            break;
-        }
-        prev = curr;
-        curr = curr->next;
-    }
-    pthread_mutex_unlock(&clients_mutex);
-    
-    // 2. Adiciona o novo cliente (seu código existente)
-    strncpy(cdata->username, msg.username, USER_SIZE);
-    pthread_mutex_lock(&clients_mutex);
-    ClientNode *client = malloc(sizeof(ClientNode));
-    if (client != NULL) {
-        client->socket = cdata->csock;
-        strncpy(client->username, msg.username, USER_SIZE);
-        client->next = clients;
-        clients = client;
-    }
-    pthread_mutex_unlock(&clients_mutex);
-    printf("[CONN] %s conectou.\n", msg.username);
-    break;
-                
+                // Remove cliente antigo com mesmo username
+                pthread_mutex_lock(&clients_mutex);
+                ClientNode *prev = NULL;
+                ClientNode *curr = clients;
+                while (curr != NULL) {
+                    if (strcmp(curr->username, msg.username) == 0) {
+                        if (prev == NULL) {
+                            clients = curr->next;
+                        } else {
+                            prev->next = curr->next;
+                        }
+                        close(curr->socket);
+                        free(curr);
+                        break;
+                    }
+                    prev = curr;
+                    curr = curr->next;
+                }
+                pthread_mutex_unlock(&clients_mutex);
+
+                // Adiciona novo cliente
+                strncpy(cdata->username, msg.username, USER_SIZE);
+                pthread_mutex_lock(&clients_mutex);
+                ClientNode *client = malloc(sizeof(ClientNode));
+                if (client != NULL) {
+                    client->socket = cdata->csock;
+                    strncpy(client->username, msg.username, USER_SIZE);
+                    client->next = clients;
+                    clients = client;
+                }
+                pthread_mutex_unlock(&clients_mutex);
+                printf("[CONN] %s conectou.\n", msg.username);
+                break;
+
             case MSG_POST:
                 pthread_mutex_lock(&id_mutex);
                 uint32_t id = next_id++;
                 pthread_mutex_unlock(&id_mutex);
-                pthread_mutex_lock(&feed_mutex);
 
+                pthread_mutex_lock(&feed_mutex);
                 feed[feed_next].id = id;
                 strncpy(feed[feed_next].username, msg.username, USER_SIZE);
                 strncpy(feed[feed_next].content, msg.content, CONTENT_SIZE);
 
                 feed_next = (feed_next + 1) % FEED_SIZE;
-                if (feed_count < FEED_SIZE){ 
-                    feed_count++;}
+                if (feed_count < FEED_SIZE) {
+                    feed_count++;
+                }
 
                 printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
-                
+
                 pthread_mutex_lock(&follows_mutex);
                 FollowNode *f = follows;
                 while (f != NULL) {
@@ -160,20 +157,20 @@ void *client_thread(void *data)
                         pthread_mutex_lock(&clients_mutex);
                         ClientNode *c = clients;
                         while (c != NULL) {
-                            if (strcmp(c->username, f->follower) == 0 && 
+                            if (strcmp(c->username, f->follower) == 0 &&
                                 strcmp(c->username, msg.username) != 0) {
                                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
-                                
+
                                 Message push_msg;
                                 push_msg.type = MSG_PUSH;
                                 strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                                 strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
                                 push_msg.msg_id = feed[pos].id;
-                                
+
                                 send(c->socket, &push_msg, sizeof(push_msg), 0);
                             }
                             c = c->next;
-                        }   
+                        }
                         pthread_mutex_unlock(&clients_mutex);
                     }
                     f = f->next;
@@ -181,14 +178,14 @@ void *client_thread(void *data)
                 pthread_mutex_unlock(&follows_mutex);
                 pthread_mutex_unlock(&feed_mutex);
                 break;
-        
+
             case MSG_FOLLOW:
                 // Ignorar auto-follow
                 if (strcmp(msg.username, msg.content) == 0) {
                     break;
                 }
                 pthread_mutex_lock(&follows_mutex);
-                // Verificar se já existe (evitar duplicados)
+                // Verificar se já existe
                 FollowNode *existing = follows;
                 int already_follows = 0;
                 while (existing != NULL) {
@@ -210,7 +207,7 @@ void *client_thread(void *data)
                 }
                 pthread_mutex_unlock(&follows_mutex);
                 break;
-        
+
             case MSG_READ:
                 pthread_mutex_lock(&feed_mutex);
                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
@@ -225,7 +222,7 @@ void *client_thread(void *data)
                 }
                 pthread_mutex_unlock(&feed_mutex);
                 break;
-        
+
             case MSG_END:
                 printf("[DISC] %s desconectou.\n", cdata->username);
                 remove_client(cdata->csock);
@@ -233,12 +230,12 @@ void *client_thread(void *data)
                 free(cdata);
                 pthread_exit(EXIT_SUCCESS);
                 break;
-        
+
             default:
                 break;
         }
     }
-    
+
     close(cdata->csock);
     free(cdata);
     pthread_exit(EXIT_SUCCESS);
@@ -246,77 +243,67 @@ void *client_thread(void *data)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
-    {
+    if (argc != 3) {
         usage(argc, argv);
     }
-    
+
     struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(argv[1], argv[2], &storage))
-    {
+    if (0 != server_sockaddr_init(argv[1], argv[2], &storage)) {
         usage(argc, argv);
     }
-    
+
     int s = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (s == -1)
-    {
+    if (s == -1) {
         logexit("socket");
     }
-    
+
     int opt = 1;
-    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-    {
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
         logexit("setsockopt");
     }
-    
+
     struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != bind(s, addr, sizeof(storage)))
-    {
+    if (0 != bind(s, addr, sizeof(storage))) {
         logexit("bind");
     }
-    
-    if (0 != listen(s, 128))
-    {
+
+    if (0 != listen(s, 128)) {
         logexit("listen");
     }
-    
+
     printf("Aguardando conexoes na porta %s.\n", argv[2]);
-    
+
     int next_client_id = 1;
-    while (1)
-    {
+    while (1) {
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
         socklen_t caddrlen = sizeof(cstorage);
-        
+
         int csock = accept(s, caddr, &caddrlen);
-        if (csock == -1)
-        {
+        if (csock == -1) {
             logexit("accept");
         }
-        
+
         struct client_data *cdata = malloc(sizeof(*cdata));
-        if (!cdata)
-        {
+        if (!cdata) {
             logexit("malloc");
         }
-        
+
         cdata->csock = csock;
         cdata->client_id = next_client_id++;
         memcpy(&(cdata->storage), &cstorage, sizeof(storage));
-        
+
         pthread_t tid;
-        if (pthread_create(&tid, NULL, client_thread, cdata) != 0)
-        {
+        if (pthread_create(&tid, NULL, client_thread, cdata) != 0) {
             perror("pthread_create");
             close(csock);
             free(cdata);
             continue;
         }
-        
+
         pthread_detach(tid);
     }
-    
+
     close(s);
     exit(EXIT_SUCCESS);
 }
