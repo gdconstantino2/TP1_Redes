@@ -102,18 +102,40 @@ void *client_thread(void *data)
         
         switch (msg.type) {
             case MSG_CONNECT:
-                strncpy(cdata->username, msg.username, USER_SIZE);
-                pthread_mutex_lock(&clients_mutex);
-                ClientNode *client = malloc(sizeof(ClientNode));
-                if (client != NULL) {
-                    client->socket = cdata->csock;
-                    strncpy(client->username, msg.username, USER_SIZE);
-                    client->next = clients; 
-                    clients = client;          
-                }
-                pthread_mutex_unlock(&clients_mutex);
-                printf("[CONN] %s conectou.\n", msg.username);
-                break;
+    // 1. Remove cliente antigo com mesmo username (se existir)
+    pthread_mutex_lock(&clients_mutex);
+    ClientNode *prev = NULL;
+    ClientNode *curr = clients;
+    while (curr != NULL) {
+        if (strcmp(curr->username, msg.username) == 0) {
+            if (prev == NULL) {
+                clients = curr->next;
+            } else {
+                prev->next = curr->next;
+            }
+            close(curr->socket);  // fecha socket antigo
+            free(curr);
+            printf("[DEBUG] Cliente antigo %s removido.\n", msg.username);
+            break;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+    pthread_mutex_unlock(&clients_mutex);
+    
+    // 2. Adiciona o novo cliente (seu código existente)
+    strncpy(cdata->username, msg.username, USER_SIZE);
+    pthread_mutex_lock(&clients_mutex);
+    ClientNode *client = malloc(sizeof(ClientNode));
+    if (client != NULL) {
+        client->socket = cdata->csock;
+        strncpy(client->username, msg.username, USER_SIZE);
+        client->next = clients;
+        clients = client;
+    }
+    pthread_mutex_unlock(&clients_mutex);
+    printf("[CONN] %s conectou.\n", msg.username);
+    break;
                 
             case MSG_POST:
                 pthread_mutex_lock(&id_mutex);
