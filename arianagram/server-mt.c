@@ -99,6 +99,10 @@ void *client_thread(void *data)
             break;
         }
 
+        // Converte endianness dos campos recebidos
+        msg.type = ntohs(msg.type);
+        msg.msg_id = ntohl(msg.msg_id);
+
         switch (msg.type) {
             case MSG_CONNECT:
                 // Remove cliente antigo com mesmo username
@@ -164,10 +168,11 @@ void *client_thread(void *data)
                                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
 
                                 Message push_msg;
-                                push_msg.type = MSG_PUSH;
+                                memset(&push_msg, 0, sizeof(push_msg));
+                                push_msg.type = htons(MSG_PUSH);
                                 strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                                 strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                                push_msg.msg_id = feed[pos].id;
+                                push_msg.msg_id = htonl(feed[pos].id);
 
                                 send(c->socket, &push_msg, sizeof(push_msg), 0);
                             }
@@ -213,10 +218,11 @@ void *client_thread(void *data)
                 int pos = (feed_next - 1 + FEED_SIZE) % FEED_SIZE;
                 for (int i = 0; i < feed_count; i++) {
                     Message push_msg;
-                    push_msg.type = MSG_PUSH;
+                    memset(&push_msg, 0, sizeof(push_msg));
+                    push_msg.type = htons(MSG_PUSH);
                     strncpy(push_msg.username, feed[pos].username, USER_SIZE);
                     strncpy(push_msg.content, feed[pos].content, CONTENT_SIZE);
-                    push_msg.msg_id = feed[pos].id;
+                    push_msg.msg_id = htonl(feed[pos].id);
                     send(cdata->csock, &push_msg, sizeof(push_msg), 0);
                     pos = (pos - 1 + FEED_SIZE) % FEED_SIZE;
                 }
@@ -256,9 +262,9 @@ int main(int argc, char **argv)
     int s = -1;
 
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;      // Aceita IPv4 e IPv6
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;       // Usa INADDR_ANY (todas interfaces)
+    hints.ai_flags = AI_PASSIVE;
 
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%d", port);
@@ -267,7 +273,6 @@ int main(int argc, char **argv)
         logexit("getaddrinfo");
     }
 
-    // Tenta criar socket com o primeiro endereço disponível
     for (p = res; p != NULL; p = p->ai_next) {
         s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (s == -1) {
@@ -285,7 +290,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        break; // Sucesso
+        break;
     }
 
     freeaddrinfo(res);
