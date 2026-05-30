@@ -87,7 +87,7 @@ int main(int argc, char **argv)
                 push_msg.msg_id = ntohl(push_msg.msg_id);
 
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] @%s: \"%s\"\n",
+                    printf("\n[NOTIFICATION] %s: \"%s\"\n",
                            push_msg.username, push_msg.content);
                     show_prompt();
                 }
