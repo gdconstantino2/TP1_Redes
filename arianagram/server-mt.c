@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #define BUFSZ 1024
 #define FEED_SIZE 5
@@ -44,7 +46,7 @@ static pthread_mutex_t id_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void usage(int argc, char **argv)
 {
-    fprintf(stderr, "Uso: %s <v4|v6> <porta>\n", argv[0]);
+    fprintf(stderr, "Uso: %s <porta>\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -148,7 +150,7 @@ void *client_thread(void *data)
                     feed_count++;
                 }
 
-                printf("[LOG] %s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
+                printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
 
                 pthread_mutex_lock(&follows_mutex);
                 FollowNode *f = follows;
@@ -180,12 +182,10 @@ void *client_thread(void *data)
                 break;
 
             case MSG_FOLLOW:
-                // Ignorar auto-follow
                 if (strcmp(msg.username, msg.content) == 0) {
                     break;
                 }
                 pthread_mutex_lock(&follows_mutex);
-                // Verificar se já existe
                 FollowNode *existing = follows;
                 int already_follows = 0;
                 while (existing != NULL) {
@@ -243,35 +243,42 @@ void *client_thread(void *data)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3) {
+    if (argc != 2) {
         usage(argc, argv);
     }
 
-    struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(argv[1], argv[2], &storage)) {
+    int port = atoi(argv[1]);
+    if (port == 0) {
         usage(argc, argv);
     }
 
-    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    // Criar socket para IPv6 (aceita IPv4 também)
+    int s = socket(AF_INET6, SOCK_STREAM, 0);
     if (s == -1) {
         logexit("socket");
     }
 
+    // Permitir IPv4 e IPv6 no mesmo socket
     int opt = 1;
-    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) {
         logexit("setsockopt");
     }
 
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != bind(s, addr, sizeof(storage))) {
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any;
+    addr.sin6_port = htons(port);
+
+    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
         logexit("bind");
     }
 
-    if (0 != listen(s, 128)) {
+    if (listen(s, 128) != 0) {
         logexit("listen");
     }
 
-    printf("Aguardando conexoes na porta %s.\n", argv[2]);
+    printf("Aguardando conexoes na porta %d.\n", port);
 
     int next_client_id = 1;
     while (1) {
@@ -291,7 +298,7 @@ int main(int argc, char **argv)
 
         cdata->csock = csock;
         cdata->client_id = next_client_id++;
-        memcpy(&(cdata->storage), &cstorage, sizeof(storage));
+        memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
 
         pthread_t tid;
         if (pthread_create(&tid, NULL, client_thread, cdata) != 0) {
