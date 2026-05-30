@@ -50,13 +50,6 @@ int main(int argc, char **argv)
         logexit("send connect");
     }
 
-    printf("\nComandos disponíveis:\n");
-    printf("  POST <texto> - Publica uma mensagem\n");
-    printf("  FOLLOW @user - Segue um usuário\n");
-    printf("  READ - Lê o feed histórico\n");
-    printf("  exit - Encerra conexão\n");
-    printf("  help - Mostra ajuda\n\n");
-
     char input[BUFSZ];
     char command[BUFSZ];
     char argument[BUFSZ];
@@ -94,7 +87,7 @@ int main(int argc, char **argv)
                 push_msg.msg_id = ntohl(push_msg.msg_id);
 
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] %s: \"%s\"\n",
+                    printf("\n[NOTIFICATION] @%s: \"%s\"\n",
                            push_msg.username, push_msg.content);
                     show_prompt();
                 }
@@ -150,26 +143,16 @@ int main(int argc, char **argv)
                     feed_msg.msg_id = ntohl(feed_msg.msg_id);
 
                     if (feed_msg.type == MSG_PUSH) {
-                        printf("[FEED] ID %u | %s: \"%s\"\n",
+                        printf("[FEED] ID %u | @%s: \"%s\"\n",
                                feed_msg.msg_id, feed_msg.username, feed_msg.content);
                         count++;
                     }
                     bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
                 }
 
-                if (count == 0) {
-                    // Feed vazio - não mostra nada conforme PDF
-                }
-                show_prompt();
-            } else if (strcmp(command, "help") == 0) {
-                printf("\nComandos:\n");
-                printf("  POST <texto> - Publica uma mensagem\n");
-                printf("  FOLLOW @user - Segue um usuário\n");
-                printf("  READ - Lê o feed histórico\n");
-                printf("  exit - Encerra conexão\n\n");
                 show_prompt();
             } else {
-                printf("Comando desconhecido. Use 'help'\n");
+                printf("Comando desconhecido.\n");
                 show_prompt();
             }
         }
