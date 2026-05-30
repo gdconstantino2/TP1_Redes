@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "common-mt.h"
+#include "common.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
