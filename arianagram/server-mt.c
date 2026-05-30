@@ -252,26 +252,46 @@ int main(int argc, char **argv)
         usage(argc, argv);
     }
 
-    // Criar socket para IPv6 (aceita IPv4 também)
-    int s = socket(AF_INET6, SOCK_STREAM, 0);
+    struct addrinfo hints, *res, *p;
+    int s = -1;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;      // Aceita IPv4 e IPv6
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;       // Usa INADDR_ANY (todas interfaces)
+
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    if (getaddrinfo(NULL, port_str, &hints, &res) != 0) {
+        logexit("getaddrinfo");
+    }
+
+    // Tenta criar socket com o primeiro endereço disponível
+    for (p = res; p != NULL; p = p->ai_next) {
+        s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (s == -1) {
+            continue;
+        }
+
+        int opt = 1;
+        if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+            close(s);
+            continue;
+        }
+
+        if (bind(s, p->ai_addr, p->ai_addrlen) == -1) {
+            close(s);
+            continue;
+        }
+
+        break; // Sucesso
+    }
+
+    freeaddrinfo(res);
+
     if (s == -1) {
-        logexit("socket");
-    }
-
-    // Permitir IPv4 e IPv6 no mesmo socket
-    int opt = 1;
-    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) {
-        logexit("setsockopt");
-    }
-
-    struct sockaddr_in6 addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(port);
-
-    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-        logexit("bind");
+        logexit("socket/bind");
     }
 
     if (listen(s, 128) != 0) {
