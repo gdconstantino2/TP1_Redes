@@ -143,7 +143,7 @@ int main(int argc, char **argv)
                     feed_msg.msg_id = ntohl(feed_msg.msg_id);
 
                     if (feed_msg.type == MSG_PUSH) {
-                        printf("[FEED] ID %u | @%s: \"%s\"\n",
+                        printf("[FEED] ID %u | %s: \"%s\"\n",
                                feed_msg.msg_id, feed_msg.username, feed_msg.content);
                         count++;
                     }
