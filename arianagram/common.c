@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common-mt.h"
+#include "common.h"
 #include <arpa/inet.h>
 
 void logexit(const char *msg){
