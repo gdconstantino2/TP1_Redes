@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <arpa/inet.h>
 
 #define BUFSZ 1024
 
@@ -38,18 +39,16 @@ int main(int argc, char **argv)
         logexit("connect");
     }
 
-    printf("Conectado ao servidor Arianagram!\n");
+    printf("Conectado ao servidor como %s.\n", argv[3]);
 
     Message msg;
     memset(&msg, 0, sizeof(msg));
-    msg.type = MSG_CONNECT;
+    msg.type = htons(MSG_CONNECT);
     strncpy(msg.username, argv[3], USER_SIZE);
 
     if (send(s, &msg, sizeof(msg), 0) != sizeof(msg)) {
         logexit("send connect");
     }
-
-    printf("Identificado como %s\n", argv[3]);
 
     printf("\nComandos disponíveis:\n");
     printf("  POST <texto> - Publica uma mensagem\n");
@@ -68,13 +67,11 @@ int main(int argc, char **argv)
     fd_set readfds;
     int max_fd;
 
-    // Função auxiliar para mostrar o prompt
     void show_prompt() {
         printf("> ");
         fflush(stdout);
     }
 
-    // Mostra o prompt inicial
     show_prompt();
 
     while (1) {
@@ -89,13 +86,15 @@ int main(int argc, char **argv)
             break;
         }
 
-        // Verifica notificações do servidor
         if (FD_ISSET(s, &readfds)) {
             Message push_msg;
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             while (bytes > 0) {
+                push_msg.type = ntohs(push_msg.type);
+                push_msg.msg_id = ntohl(push_msg.msg_id);
+
                 if (push_msg.type == MSG_PUSH) {
-                    printf("\n[NOTIFICATION] %s: \"%s\"\n",
+                    printf("\n[NOTIFICATION] @%s: \"%s\"\n",
                            push_msg.username, push_msg.content);
                     show_prompt();
                 }
@@ -103,7 +102,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Verifica comando do usuário
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
             if (fgets(input, BUFSZ, stdin) == NULL) {
                 break;
@@ -123,23 +121,23 @@ int main(int argc, char **argv)
             memset(&msg, 0, sizeof(msg));
 
             if (strcmp(command, "exit") == 0) {
-                msg.type = MSG_END;
+                msg.type = htons(MSG_END);
                 send(s, &msg, sizeof(msg), 0);
                 break;
             } else if (strcmp(command, "POST") == 0) {
-                msg.type = MSG_POST;
+                msg.type = htons(MSG_POST);
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
                 show_prompt();
             } else if (strcmp(command, "FOLLOW") == 0) {
-                msg.type = MSG_FOLLOW;
+                msg.type = htons(MSG_FOLLOW);
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
                 show_prompt();
             } else if (strcmp(command, "READ") == 0) {
-                msg.type = MSG_READ;
+                msg.type = htons(MSG_READ);
                 send(s, &msg, sizeof(msg), 0);
 
                 usleep(100000);
@@ -148,8 +146,11 @@ int main(int argc, char **argv)
                 Message feed_msg;
                 bytes = recv(s, &feed_msg, sizeof(feed_msg), MSG_DONTWAIT);
                 while (bytes > 0) {
+                    feed_msg.type = ntohs(feed_msg.type);
+                    feed_msg.msg_id = ntohl(feed_msg.msg_id);
+
                     if (feed_msg.type == MSG_PUSH) {
-                        printf("[FEED] ID %u | %s: \"%s\"\n",
+                        printf("[FEED] ID %u | @%s: \"%s\"\n",
                                feed_msg.msg_id, feed_msg.username, feed_msg.content);
                         count++;
                     }
@@ -157,7 +158,7 @@ int main(int argc, char **argv)
                 }
 
                 if (count == 0) {
-                    printf("[FEED] Nenhuma mensagem no feed.\n");
+                    // Feed vazio - não mostra nada conforme PDF
                 }
                 show_prompt();
             } else if (strcmp(command, "help") == 0) {
