@@ -68,6 +68,15 @@ int main(int argc, char **argv)
     fd_set readfds;
     int max_fd;
 
+    // Função auxiliar para mostrar o prompt
+    void show_prompt() {
+        printf("> ");
+        fflush(stdout);
+    }
+
+    // Mostra o prompt inicial
+    show_prompt();
+
     while (1) {
         FD_ZERO(&readfds);
         FD_SET(s, &readfds);
@@ -80,6 +89,7 @@ int main(int argc, char **argv)
             break;
         }
 
+        // Verifica notificações do servidor
         if (FD_ISSET(s, &readfds)) {
             Message push_msg;
             bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
@@ -87,28 +97,26 @@ int main(int argc, char **argv)
                 if (push_msg.type == MSG_PUSH) {
                     printf("\n[NOTIFICATION] @%s: \"%s\"\n",
                            push_msg.username, push_msg.content);
-                    fflush(stdout);
-                    printf("> ");
-                    fflush(stdout);
+                    show_prompt();
                 }
                 bytes = recv(s, &push_msg, sizeof(push_msg), MSG_DONTWAIT);
             }
         }
 
+        // Verifica comando do usuário
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
-            printf("> ");
-            fflush(stdout);
-
             if (fgets(input, BUFSZ, stdin) == NULL) {
                 break;
             }
 
             input[strcspn(input, "\n")] = '\0';
             if (strlen(input) == 0) {
+                show_prompt();
                 continue;
             }
 
             if (sscanf(input, "%s %[^\n]", command, argument) < 1) {
+                show_prompt();
                 continue;
             }
 
@@ -123,11 +131,13 @@ int main(int argc, char **argv)
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
+                show_prompt();
             } else if (strcmp(command, "FOLLOW") == 0) {
                 msg.type = MSG_FOLLOW;
                 strncpy(msg.username, argv[3], USER_SIZE);
                 strncpy(msg.content, argument, CONTENT_SIZE);
                 send(s, &msg, sizeof(msg), 0);
+                show_prompt();
             } else if (strcmp(command, "READ") == 0) {
                 msg.type = MSG_READ;
                 send(s, &msg, sizeof(msg), 0);
@@ -149,15 +159,17 @@ int main(int argc, char **argv)
                 if (count == 0) {
                     printf("[FEED] Nenhuma mensagem no feed.\n");
                 }
-                fflush(stdout);
+                show_prompt();
             } else if (strcmp(command, "help") == 0) {
                 printf("\nComandos:\n");
                 printf("  POST <texto> - Publica uma mensagem\n");
                 printf("  FOLLOW @user - Segue um usuário\n");
                 printf("  READ - Lê o feed histórico\n");
                 printf("  exit - Encerra conexão\n\n");
+                show_prompt();
             } else {
                 printf("Comando desconhecido. Use 'help'\n");
+                show_prompt();
             }
         }
     }
