@@ -148,7 +148,7 @@ void *client_thread(void *data)
                     feed_count++;
                 }
 
-                printf("[LOG] @%s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
+                printf("[LOG] %s posted (ID %u): \"%s\"\n", msg.username, id, msg.content);
 
                 pthread_mutex_lock(&follows_mutex);
                 FollowNode *f = follows;
